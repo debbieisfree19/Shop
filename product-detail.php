@@ -12,11 +12,14 @@ $currentUsername = $_SESSION['username'] ?? '';
 $currentUserId   = $_SESSION['user_id'] ?? '';
 
 // Lấy id sản phẩm từ query string
-$productId = $_GET['id'] ?? '';
-if ($productId === '' || !ctype_digit($productId)) {
+$productKey = trim($_GET['id'] ?? '');
+$skuKey     = trim($_GET['sku'] ?? '');
+
+if ($productKey === '' && $skuKey === '') {
     header('Location: shop.php');
     exit;
 }
+
 
 // ============================
 // Xử lý submit đánh giá
@@ -44,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_r
                 ";
                 $stmtIns = $pdo->prepare($sqlInsert);
                 $stmtIns->execute([
-                    ':productId' => (int)$productId,
+                    ':productId' => $product['ProductID'],
                     ':userId'    => $currentUserId,
                     ':rating'    => $rating,
                     ':comment'   => $comment,
@@ -71,40 +74,44 @@ $product = null;
 $error_message = '';
 
 try {
-    $sql = "
-        SELECT
-            p.ProductID,
-            p.ProductName,
-            p.Description,
-            p.Price,
-            p.DiscountPrice,
-            p.CreatedDate,
-            (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage,
-            pub.PublisherName,
-            GROUP_CONCAT(DISTINCT c.CategoryName SEPARATOR ', ') AS Categories
-        FROM Product p
-        LEFT JOIN Publisher pub
-            ON p.PublisherID = pub.PublisherID
-        LEFT JOIN Product_Categories pc
-            ON p.ProductID = pc.ProductID
-        LEFT JOIN Categories c
-            ON pc.CategoryID = c.CategoryID
-        WHERE p.ProductID = :id
-        GROUP BY
-            p.ProductID,
-            p.ProductName,
-            p.Description,
-            p.Price,
-            p.DiscountPrice,
-            p.CreatedDate,
-            HasImage,
-            pub.PublisherName
-        LIMIT 1
-    ";
+    $where = "";
+$params = [];
 
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([':id' => (int)$productId]);
-    $product = $stmt->fetch(PDO::FETCH_ASSOC);
+if ($productKey !== '') {
+    $where = "p.ProductID = :key";
+    $params[':key'] = $productKey;
+} else {
+    $where = "p.SKU = :key";
+    $params[':key'] = $skuKey;
+}
+
+$sql = "
+    SELECT
+        p.ProductID,
+        p.SKU,
+        p.ProductName,
+        p.Description,
+        p.Price,
+        p.DiscountPrice,
+        p.CreatedDate,
+        (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage,
+        pub.PublisherName,
+        GROUP_CONCAT(DISTINCT c.CategoryName SEPARATOR ', ') AS Categories
+    FROM Product p
+    LEFT JOIN Publisher pub ON p.PublisherID = pub.PublisherID
+    LEFT JOIN Product_Categories pc ON p.ProductID = pc.ProductID
+    LEFT JOIN Categories c ON pc.CategoryID = c.CategoryID
+    WHERE $where
+    GROUP BY
+        p.ProductID, p.SKU, p.ProductName, p.Description, p.Price, p.DiscountPrice,
+        p.CreatedDate, HasImage, pub.PublisherName
+    LIMIT 1
+";
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$product = $stmt->fetch(PDO::FETCH_ASSOC);
+
 
     if (!$product) {
         $error_message = 'Sản phẩm không tồn tại hoặc đã bị ẩn.';
@@ -126,7 +133,8 @@ if ($product) {
             LIMIT 1
         ";
         $cateStmt = $pdo->prepare($firstCategorySql);
-        $cateStmt->execute([':id' => (int)$productId]);
+        $cateStmt->execute([':productId' => $product['ProductID']
+]);
         $cateRow = $cateStmt->fetch(PDO::FETCH_ASSOC);
 
         if ($cateRow) {
@@ -150,8 +158,7 @@ if ($product) {
             $relStmt = $pdo->prepare($relatedSql);
             $relStmt->execute([
                 ':cateId' => $cateId,
-                ':id'     => (int)$productId
-            ]);
+                 ':productId' => $product['ProductID']]);
             $relatedProducts = $relStmt->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (Exception $e) {}
@@ -177,7 +184,8 @@ if ($product) {
             LIMIT 20
         ";
         $reviewStmt = $pdo->prepare($reviewSql);
-        $reviewStmt->execute([':id' => (int)$productId]);
+        $reviewStmt->execute([':productId' => $product['ProductID'],
+]);
         $reviews = $reviewStmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {}
 }
