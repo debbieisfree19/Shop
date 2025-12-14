@@ -145,7 +145,7 @@ function h($str)
                 $tab = 'overview';
             }
 
-            $tabFile = __DIR__ . "/admin/admin-$tab.php";
+            $tabFile = __DIR__ . "/admin-$tab.php";
 
             if (file_exists($tabFile)) {
                 require $tabFile;
