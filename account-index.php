@@ -17,9 +17,15 @@ $user_id = $_SESSION['user_id'];
 $current_section = $_GET['section'] ?? 'profile';
 
 // Fetch user basic info
-$stmt = $pdo->prepare("SELECT UserID, Username, FullName, Phone, Email, City, District, Ward, Street, HouseNumber FROM User_Account WHERE UserID = ?");
+$stmt = $pdo->prepare("SELECT UserID, Username, FullName, Role, Phone, Email, City, District, Ward, Street, HouseNumber FROM User_Account WHERE UserID = ?");
 $stmt->execute([$user_id]);
 $user = $stmt->fetch();
+
+// Logic phân quyền: Nếu là Admin thì chuyển sang trang Admin Dashboard
+if ($user && $user['Role'] === 'Admin') {
+    header('Location: admin-dashboard.php');
+    exit;
+}
 ?>
 
 <!DOCTYPE html>

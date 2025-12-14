@@ -15,7 +15,7 @@ $error_message = '';
 if (isset($_SESSION['user_id'])) {
     $role = $_SESSION['role'] ?? 'Customer'; // Mặc định là Customer nếu không tìm thấy
     if ($role === 'Admin') {
-        header('Location: admin-index.php');
+        header('Location: admin-dashboard.php');
     } else {
         header('Location: account-index.php');
     }
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 // --- LOGIC 3: CHUYỂN HƯỚNG THEO ROLE ---
                 if ($user['Role'] === 'Admin') {
-                    header('Location: admin-index.php');
+                    header('Location: admin-dashboard.php');
                 } else {
                     // Mặc định Customer hoặc các role khác
                     header('Location: account-index.php');
