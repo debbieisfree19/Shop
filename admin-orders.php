@@ -116,6 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // 4. LẤY DỮ LIỆU ĐƠN HÀNG (GET)
 $filter = $_GET['status'] ?? 'ALL';
 $returnFilter = $_GET['return_filter'] ?? ''; // Lấy thêm tham số lọc trả hàng
+$searchId = isset($_GET['search_id']) ? trim($_GET['search_id']) : ''; // [MỚI] Lấy từ khóa tìm kiếm Order ID
+
 $params = [];
 
 $sql = "
@@ -137,7 +139,14 @@ $sql = "
     WHERE 1=1
 ";
 
-// Xử lý bộ lọc
+// [MỚI] Xử lý lọc theo Mã Đơn Hàng
+if (!empty($searchId)) {
+    // Dùng LIKE để tìm gần đúng hoặc tìm chính xác. Ở đây dùng %...% để tìm linh hoạt
+    $sql .= " AND o.OrderID LIKE ?";
+    $params[] = "%$searchId%";
+}
+
+// Xử lý bộ lọc trạng thái
 if ($filter !== 'ALL') {
     // Nếu chọn "Trả hàng" VÀ có chọn thêm trạng thái con
     if ($filter === 'Trả hàng' && !empty($returnFilter)) {
@@ -224,6 +233,13 @@ if (!empty($orderIds)) {
     <form method="GET" class="row g-2 mb-3 align-items-center" id="filterForm">
         <input type="hidden" name="tab" value="orders">
         
+        <div class="col-md-auto">
+            <label class="form-label fw-bold m-0">Mã đơn:</label>
+        </div>
+        <div class="col-md-2">
+            <input type="text" name="search_id" class="form-control" placeholder="Nhập ID..." value="<?php echo h($searchId); ?>">
+        </div>
+
         <div class="col-md-auto">
             <label class="form-label fw-bold m-0">Trạng thái:</label>
         </div>
