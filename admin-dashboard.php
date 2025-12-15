@@ -498,7 +498,7 @@ if ($tab === 'posts') {
         href="?tab=orders"
         class="admin-tab-link <?php echo $tab === 'orders' ? 'admin-tab-link-active' : ''; ?>"
     >
-        Đơn hàng
+        Quản lý Đơn hàng
     </a>
     <a
         href="?tab=products"
@@ -519,10 +519,10 @@ if ($tab === 'posts') {
         Khách hàng
     </a>
     <a
-        href="?tab=marketing"
+        href="?tab=marketing" 
         class="admin-tab-link <?php echo $tab === 'marketing' ? 'admin-tab-link-active' : ''; ?>"
     >
-        Kênh marketing
+        Quản lý Voucher
     </a>
     
 </nav>
@@ -814,156 +814,10 @@ if ($tab === 'posts') {
             </div>
         <?php endif; ?>
 
-        <!-- ================= MARKETING ================= -->
+        <!-- ================= VOUCHER ================= -->
         <?php if ($tab === 'marketing'): ?>
-            <div class="account-card mb-3">
-                <h2 class="account-card-title">Tạo mã giảm giá mới</h2>
-
-                <form method="POST" class="row g-3">
-                    <input type="hidden" name="action" value="create_voucher">
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="code">Mã *</label>
-                        <input
-                            type="text"
-                            id="code"
-                            name="code"
-                            class="account-input w-100"
-                            required
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="discount_type">Loại giảm</label>
-                        <select id="discount_type" name="discount_type" class="account-input w-100">
-                            <option value="PERCENT">Phần trăm (%)</option>
-                            <option value="AMOUNT">Số tiền (VND)</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="discount_value">Giá trị giảm *</label>
-                        <input
-                            type="number"
-                            id="discount_value"
-                            name="discount_value"
-                            class="account-input w-100"
-                            step="0.01"
-                            min="0"
-                            required
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="min_order">Đơn tối thiểu</label>
-                        <input
-                            type="number"
-                            id="min_order"
-                            name="min_order"
-                            class="account-input w-100"
-                            step="0.01"
-                            min="0"
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="max_discount">Giảm tối đa (VND)</label>
-                        <input
-                            type="number"
-                            id="max_discount"
-                            name="max_discount"
-                            class="account-input w-100"
-                            step="0.01"
-                            min="0"
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="usage_limit">Giới hạn lượt dùng</label>
-                        <input
-                            type="number"
-                            id="usage_limit"
-                            name="usage_limit"
-                            class="account-input w-100"
-                            min="0"
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="start_date">Ngày bắt đầu</label>
-                        <input
-                            type="datetime-local"
-                            id="start_date"
-                            name="start_date"
-                            class="account-input w-100"
-                        >
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="account-label" for="end_date">Ngày kết thúc</label>
-                        <input
-                            type="datetime-local"
-                            id="end_date"
-                            name="end_date"
-                            class="account-input w-100"
-                        >
-                    </div>
-
-                    <div class="col-12 d-flex justify-content-end">
-                        <button type="submit" class="account-btn-save">
-                            Tạo mã giảm giá
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="account-card">
-                <h2 class="account-card-title">Danh sách mã giảm giá</h2>
-                <?php if (empty($vouchers)): ?>
-                    <p class="account-empty-text mb-0">
-                        Chưa có mã giảm giá nào.
-                    </p>
-                <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table align-middle mb-0">
-                            <thead>
-                            <tr>
-                                <th>Mã</th>
-                                <th>Mô tả</th>
-                                <th>Loại</th>
-                                <th>Giá trị</th>
-                                <th>Đơn tối thiểu</th>
-                                <th>Giảm tối đa</th>
-                                <th>Thời gian</th>
-                                <th>Dùng / Giới hạn</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            <?php foreach ($vouchers as $v): ?>
-                                <tr>
-                                    <td><?php echo h($v['Code']); ?></td>
-                                    <td><?php echo h($v['Description']); ?></td>
-                                    <td><?php echo h($v['DiscountType']); ?></td>
-                                    <td><?php echo number_format($v['DiscountValue'], 0, ',', '.'); ?></td>
-                                    <td><?php echo number_format($v['MinOrder'] ?? 0, 0, ',', '.'); ?></td>
-                                    <td><?php echo number_format($v['MaxDiscount'] ?? 0, 0, ',', '.'); ?></td>
-                                    <td>
-                                        <?php echo h($v['StartDate']); ?>
-                                        <br>→ <?php echo h($v['EndDate']); ?>
-                                    </td>
-                                    <td>
-                                        <?php echo (int)$v['UsedCount']; ?> /
-                                        <?php echo $v['UsageLimit'] !== null ? (int)$v['UsageLimit'] : '∞'; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-            </div>
+            <?php include 'admin-voucher.php'; ?>
         <?php endif; ?>
-
     </div>
 </main>
 

@@ -441,7 +441,9 @@ if (!empty($orderIds)) {
                                     elseif ($o['Status'] === 'Đã hoàn tiền'): ?>
                                         <div class="alert alert-info p-2 small mt-2">
                                             <strong><i class="fas fa-check-double"></i> Đã hoàn tiền</strong><br>
-                                            Đơn hàng đã kết thúc.
+                                            <?php if (!empty($o['TotalRefund'])): ?>
+                                                Số tiền đã hoàn: <span class="text-danger fw-bold"><?php echo number_format($o['TotalRefund'], 0, ',', '.'); ?> đ</span>
+                                            <?php endif; ?>
                                         </div>
 
                                     <?php 
