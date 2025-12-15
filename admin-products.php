@@ -7,7 +7,7 @@
  * - Xóa sách
  */
 
-session_start();
+
 require_once 'db_connect.php';
 
 // ====== Check quyền admin (tạm comment nếu đang test) ======
@@ -216,53 +216,10 @@ try {
 </head>
 <body class="account-body admin-page">
 
-<header class="account-header site-header">
-    <div class="container header-inner">
-        <div class="header-left">
-            <a href="index.php" class="logo-link">
-                <span class="account-logo">Moonlit</span>
-            </a>
-            <nav class="header-menu">
-                <a href="shop.php" class="header-menu-link">Cửa hàng</a>
-                <a href="admin-dashboard.php?tab=products"
-                   class="header-menu-link nav-active">
-                    Admin · Sản phẩm
-                </a>
-            </nav>
-        </div>
 
-        <div class="header-right">
-            <div class="header-account">
-                <span class="account-username">
-                    Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                </span>
-                <div class="header-account-actions">
-                    <a href="admin-dashboard.php" class="account-btn-secondary header-account-btn">
-                        Bảng điều khiển
-                    </a>
-                    <a href="logout.php" class="account-btn-secondary header-account-btn">
-                        Đăng xuất
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-</header>
 
 <main class="account-main">
-    <div class="container">
-
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h1 class="account-section-title mb-0">
-                Quản lý sản phẩm
-            </h1>
-            <a
-                href="admin-dashboard.php?tab=products"
-                class="account-btn-secondary text-decoration-none"
-            >
-                ← Về trang admin
-            </a>
-        </div>
+    <div class="account-card mb-3">
 
         <?php if ($success_message): ?>
             <div class="alert alert-success account-alert">
@@ -450,9 +407,6 @@ try {
     </div>
 </main>
 
-<footer class="site-footer">
-    © <?php echo date('Y'); ?> Moonlit Store. All rights reserved.
-</footer>
 
 <script
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
