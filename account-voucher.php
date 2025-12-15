@@ -237,23 +237,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 // ============================================================================
 // DATA FETCHING FOR VIEW
 // ============================================================================
-// 1. Ví Voucher
+// --- 1. VÍ VOUCHER CỦA TÔI (Phân trang biến: page_my) ---
+$limit_my = 5; // Số lượng hiển thị mỗi trang
+$page_my = isset($_GET['page_my']) ? (int)$_GET['page_my'] : 1;
+if ($page_my < 1) $page_my = 1;
+$offset_my = ($page_my - 1) * $limit_my;
+
+// Đếm tổng số voucher của tôi
+$stmtCountMy = $pdo->prepare("SELECT COUNT(*) FROM User_Voucher WHERE UserID = ? AND OrderID IS NULL");
+$stmtCountMy->execute([$user_id]);
+$total_my = $stmtCountMy->fetchColumn();
+$total_pages_my = ceil($total_my / $limit_my);
+
+// Lấy dữ liệu phân trang
 $stmt = $pdo->prepare("
-    SELECT uv.ID, uv.DateReceived, v.Code, v.Code AS VoucherName, v.Description, v.EndDate 
+    SELECT uv.ID, uv.DateReceived, v.Code, v.Code AS VoucherName, v.Description, v.EndDate, v.MinOrder, v.MaxDiscount 
     FROM User_Voucher uv JOIN Voucher v ON uv.VoucherID = v.VoucherID 
     WHERE uv.UserID = ? AND uv.OrderID IS NULL 
     ORDER BY uv.DateReceived DESC
+    LIMIT $limit_my OFFSET $offset_my
 ");
 $stmt->execute([$user_id]);
 $user_vouchers = $stmt->fetchAll();
 
-// 2. Voucher có thể đổi
+
+// --- 2. VOUCHER CÓ THỂ ĐỔI (Phân trang biến: page_redeem) ---
+$limit_redeem = 8; // Số lượng hiển thị mỗi trang
+$page_redeem = isset($_GET['page_redeem']) ? (int)$_GET['page_redeem'] : 1;
+if ($page_redeem < 1) $page_redeem = 1;
+$offset_redeem = ($page_redeem - 1) * $limit_redeem;
+
+// Đếm tổng số voucher có thể đổi
+$stmtCountRedeem = $pdo->prepare("
+    SELECT COUNT(*) FROM Voucher 
+    WHERE Status = 1 AND UsedCount < UsageLimit AND RankRequirement = 'None'
+    AND (EndDate IS NULL OR EndDate > NOW()) 
+    AND VoucherID NOT IN (SELECT VoucherID FROM User_Voucher WHERE UserID = ?)
+");
+$stmtCountRedeem->execute([$user_id]);
+$total_redeem = $stmtCountRedeem->fetchColumn();
+$total_pages_redeem = ceil($total_redeem / $limit_redeem);
+
+// Lấy dữ liệu phân trang
 $stmt = $pdo->prepare("
     SELECT *, Code AS VoucherName FROM Voucher 
     WHERE Status = 1 AND UsedCount < UsageLimit AND RankRequirement = 'None'
     AND (EndDate IS NULL OR EndDate > NOW()) 
     AND VoucherID NOT IN (SELECT VoucherID FROM User_Voucher WHERE UserID = ?) 
     ORDER BY VoucherPoint ASC
+    LIMIT $limit_redeem OFFSET $offset_redeem
 ");
 $stmt->execute([$user_id]);
 $available_vouchers = $stmt->fetchAll();
@@ -269,8 +301,6 @@ $stmt = $pdo->prepare("
 $stmt->execute([$user_id]);
 $point_history = $stmt->fetchAll();
 ?>
-
-<div class="account-section">
 
 <div class="account-section">
     <h2 class="account-section-title">Voucher & Đổi Điểm</h2>
@@ -339,9 +369,15 @@ $point_history = $stmt->fetchAll();
                             <h4 class="account-voucher-item-name">
                                 <?php echo htmlspecialchars($voucher['VoucherName']); ?>
                             </h4>
-                            <p class="account-voucher-item-description">
+                            <div class="account-voucher-item-description">
                                 <?php echo htmlspecialchars(substr($voucher['Description'], 0, 80)); ?>
-                            </p>
+                                <?php if ($voucher['MinOrder'] > 0): ?>
+                                    <div>Đơn tối thiểu <strong><?php echo number_format($voucher['MinOrder'], 0, ',', '.'); ?> đ</strong></div>
+                                <?php endif; ?>
+                                <?php if ($voucher['MaxDiscount'] > 0): ?>
+                                    <div>Giảm tối đa: <strong><?php echo number_format($voucher['MaxDiscount'], 0, ',', '.'); ?> đ</strong></div>
+                                <?php endif; ?>
+                            </div>
                             <div class="account-voucher-item-meta">
                                 <span class="account-voucher-item-received">
                                     Nhận: <?php echo date('d/m/Y', strtotime($voucher['DateReceived'])); ?>
@@ -353,8 +389,23 @@ $point_history = $stmt->fetchAll();
                                 <?php endif; ?>
                             </div>
                         </div>
-                    </div>
+                    </div> 
                 <?php endforeach; ?>
+                <?php if ($total_pages_my > 1): ?>
+                    <div class="d-flex justify-content-center mt-3">
+                        <nav>
+                            <ul class="pagination pagination-sm">
+                                <?php for ($i = 1; $i <= $total_pages_my; $i++): ?>
+                                    <li class="page-item <?php echo ($i == $page_my) ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?section=voucher&page_my=<?php echo $i; ?>&page_redeem=<?php echo $page_redeem; ?>">
+                                            <?php echo $i; ?>
+                                        </a>
+                                    </li>
+                                <?php endfor; ?>
+                            </ul>
+                        </nav>
+                    </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
@@ -382,9 +433,15 @@ $point_history = $stmt->fetchAll();
                             </h4>
                         </div>
 
-                        <p class="account-voucher-redeem-description">
-                            <?php echo htmlspecialchars($voucher['Description']); ?>
-                        </p>
+                        <div class="account-voucher-redeem-description">
+                            <?php echo htmlspecialchars(substr($voucher['Description'], 0, 80)); ?>
+                                <?php if ($voucher['MinOrder'] > 0): ?>
+                                    <div>Đơn tối thiểu <strong><?php echo number_format($voucher['MinOrder'], 0, ',', '.'); ?> đ</strong></div>
+                                <?php endif; ?>
+                                <?php if ($voucher['MaxDiscount'] > 0): ?>
+                                    <div>Giảm tối đa: <strong><?php echo number_format($voucher['MaxDiscount'], 0, ',', '.'); ?> đ</strong></div>
+                                <?php endif; ?>
+                        </div>
 
                         <div class="account-voucher-redeem-details">
                             <div class="account-voucher-redeem-detail-item">
@@ -418,7 +475,21 @@ $point_history = $stmt->fetchAll();
                         </form>
                     </div>
                 <?php endforeach; ?>
+            </div> <?php if ($total_pages_redeem > 1): ?>
+            <div class="d-flex justify-content-center mt-3">
+                <nav>
+                    <ul class="pagination pagination-sm">
+                        <?php for ($i = 1; $i <= $total_pages_redeem; $i++): ?>
+                            <li class="page-item <?php echo ($i == $page_redeem) ? 'active' : ''; ?>">
+                                <a class="page-link" href="?section=voucher&page_redeem=<?php echo $i; ?>&page_my=<?php echo $page_my; ?>">
+                                    <?php echo $i; ?>
+                                </a>
+                            </li>
+                        <?php endfor; ?>
+                    </ul>
+                </nav>
             </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 

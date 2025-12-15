@@ -1,34 +1,38 @@
 <?php
-// Kết nối Database (giả sử bạn đã có file này)
-require_once 'db_connect.php';
+// admin-voucher-manager.php
 
-// Hàm helper để render an toàn (chống XSS)
+// 1. KẾT NỐI DB & HELPER
+if (!isset($pdo)) {
+    require_once 'db_connect.php';
+}
+
 if (!function_exists('h')) {
     function h($str) {
         return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
     }
 }
 
-
 $message = '';
 $error = '';
 
 // ============================================================================
-// 1. CHỨC NĂNG TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI (AUTO STATUS UPDATE)
-// Logic: Nếu đến ngày bắt đầu (StartDate <= NOW) mà Status vẫn là 0 -> Update lên 1
+// 1. XỬ LÝ CẬP NHẬT TRẠNG THÁI NHANH (DROPDOWN)
 // ============================================================================
-try {
-    $stmtUpdate = $pdo->prepare("
-        UPDATE Voucher 
-        SET Status = 1 
-        WHERE Status = 0 
-        AND StartDate <= NOW() 
-        AND (EndDate IS NULL OR EndDate > NOW())
-    ");
-    $stmtUpdate->execute();
-    // Có thể thông báo số dòng đã update nếu cần: $stmtUpdate->rowCount();
-} catch (Exception $e) {
-    // Log error
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status_quick') {
+    $v_id = $_POST['voucher_id'];
+    $new_status = (int)$_POST['new_status']; 
+
+    try {
+        $stmt = $pdo->prepare("UPDATE Voucher SET Status = :status WHERE VoucherID = :id");
+        $stmt->bindValue(':status', $new_status, PDO::PARAM_INT);
+        $stmt->bindValue(':id', $v_id);
+        $stmt->execute();
+        
+        echo "<script>window.location.href = '?tab=marketing';</script>";
+        exit;
+    } catch (Exception $e) {
+        $error = "Lỗi cập nhật trạng thái: " . $e->getMessage();
+    }
 }
 
 // ============================================================================
@@ -36,26 +40,23 @@ try {
 // ============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_voucher') {
     try {
-        // Tạo Voucher ID tự động (V00001...)
         $stmtId = $pdo->query("SELECT MAX(CAST(SUBSTRING(VoucherID, 2) AS UNSIGNED)) as max_id FROM Voucher");
         $next_id = ($stmtId->fetch()['max_id'] ?? 0) + 1;
         $voucher_id = 'V' . str_pad($next_id, 5, '0', STR_PAD_LEFT);
 
-        // Lấy dữ liệu từ form
+        // ... (Giữ nguyên logic lấy dữ liệu form) ...
         $voucher_name = $_POST['VoucherName'];
         $code = $_POST['Code'];
         $desc = $_POST['Description'];
-        $type = $_POST['DiscountType']; // PERCENT hoặc AMOUNT
+        $type = $_POST['DiscountType'];
         $value = $_POST['DiscountValue'];
         $min_order = $_POST['MinOrder'];
         $max_discount = $_POST['MaxDiscount'];
-        $start_date = $_POST['StartDate'];
-        $end_date = !empty($_POST['EndDate']) ? $_POST['EndDate'] : NULL;
+        $start_date = str_replace('T', ' ', $_POST['StartDate']);
+        $end_date = !empty($_POST['EndDate']) ? str_replace('T', ' ', $_POST['EndDate']) : NULL;
         $usage_limit = $_POST['UsageLimit'];
-        $status = $_POST['Status']; // 0 hoặc 1
-        $rank = $_POST['RankRequirement']; 
-        
-        // Logic điểm: Nếu rank là None (Chung) thì lấy điểm từ form, ngược lại là 0
+        $status = (int)$_POST['Status']; 
+        $rank = $_POST['RankRequirement'];
         $point = ($rank === 'None') ? $_POST['VoucherPoint'] : 0;
 
         $sql = "INSERT INTO Voucher (
@@ -63,57 +64,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             MinOrder, MaxDiscount, StartDate, EndDate, UsageLimit, UsedCount, 
             VoucherPoint, Status, RankRequirement
         ) VALUES (
-            ?, ?, ?, ?, ?, ?, 
-            ?, ?, ?, ?, ?, 0, 
-            ?, ?, ?
+            :id, :name, :code, :desc, :type, :val, 
+            :min, :max, :start, :end, :limit, 0, 
+            :point, :status, :rank
         )";
 
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([
-            $voucher_id, $voucher_name, $code, $desc, $type, $value,
-            $min_order, $max_discount, $start_date, $end_date, $usage_limit,
-            $point, $status, $rank
-        ]);
+        $stmt->bindValue(':id', $voucher_id);
+        $stmt->bindValue(':name', $voucher_name);
+        $stmt->bindValue(':code', $code);
+        $stmt->bindValue(':desc', $desc);
+        $stmt->bindValue(':type', $type);
+        $stmt->bindValue(':val', $value);
+        $stmt->bindValue(':min', $min_order);
+        $stmt->bindValue(':max', $max_discount);
+        $stmt->bindValue(':start', $start_date);
+        $stmt->bindValue(':end', $end_date);
+        $stmt->bindValue(':limit', $usage_limit);
+        $stmt->bindValue(':point', $point);
+        $stmt->bindValue(':status', $status, PDO::PARAM_INT); 
+        $stmt->bindValue(':rank', $rank);
+        
+        $stmt->execute();
 
         $message = "Tạo voucher thành công! Mã: " . $code;
+        echo "<script>window.location.href = '?tab=marketing';</script>";
+        exit;
+        
     } catch (Exception $e) {
         $error = "Lỗi tạo voucher: " . $e->getMessage();
     }
 }
 
 // ============================================================================
-// 3. XỬ LÝ LỌC VÀ HIỂN THỊ DANH SÁCH (FILTER & LIST)
+// 3. XỬ LÝ LỌC & PHÂN TRANG (PAGINATION)
 // ============================================================================
 $filter_status = $_GET['status'] ?? '';
 $filter_rank = $_GET['rank'] ?? '';
 
-$sqlList = "SELECT * FROM Voucher WHERE 1=1";
+// [PHÂN TRANG] 1. Xác định trang hiện tại và số item mỗi trang
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$limit = 7; // Số voucher mỗi trang (Bạn có thể sửa số này)
+$offset = ($page - 1) * $limit;
+
+// Điều kiện lọc chung
+$whereClause = "WHERE 1=1";
 $params = [];
 
 if ($filter_status !== '') {
-    $sqlList .= " AND Status = ?";
+    $whereClause .= " AND Status = ?";
     $params[] = $filter_status;
 }
 
 if ($filter_rank !== '') {
-    $sqlList .= " AND RankRequirement = ?";
+    $whereClause .= " AND RankRequirement = ?";
     $params[] = $filter_rank;
 }
 
-$sqlList .= " ORDER BY StartDate DESC"; // Mới nhất lên đầu
+// [PHÂN TRANG] 2. Đếm tổng số bản ghi (để tính tổng số trang)
+$sqlCount = "SELECT COUNT(*) FROM Voucher " . $whereClause;
+$stmtCount = $pdo->prepare($sqlCount);
+$stmtCount->execute($params);
+$total_rows = $stmtCount->fetchColumn();
+$total_pages = ceil($total_rows / $limit);
 
+// [PHÂN TRANG] 3. Lấy dữ liệu với LIMIT và OFFSET
+$sqlList = "SELECT * FROM Voucher " . $whereClause . " ORDER BY StartDate DESC LIMIT $limit OFFSET $offset";
 $stmtList = $pdo->prepare($sqlList);
 $stmtList->execute($params);
 $vouchers = $stmtList->fetchAll();
 
-// Mảng map Rank sang tiếng Việt để hiển thị
 $rankMap = [
-    'None' => 'Chung',
-    'Free' => 'Miễn phí',
-    'Bronze' => 'Đồng',
-    'Silver' => 'Bạc',
-    'Gold' => 'Vàng',
-    'Platinum' => 'Bạch kim'
+    'None' => 'Chung', 'Free' => 'Miễn phí', 'Bronze' => 'Đồng',
+    'Silver' => 'Bạc', 'Gold' => 'Vàng', 'Platinum' => 'Bạch kim'
 ];
 ?>
 
@@ -121,12 +144,26 @@ $rankMap = [
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Quản Lý Voucher</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         .card-header { background-color: #f8f9fa; font-weight: bold; }
-        .status-badge-1 { background-color: #198754; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em;}
-        .status-badge-0 { background-color: #6c757d; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em;}
+        
+        /* CSS cho Badge Rank */
+        .rank-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; border: 1px solid #ccc; }
+        .rank-Gold { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
+        .rank-Silver { background-color: #e2e3e5; color: #41464b; border-color: #d6d8db; }
+        .rank-Bronze { background-color: #f8d7da; color: #842029; border-color: #f5c2c7; }
+        .rank-Platinum { background-color: #cff4fc; color: #055160; border-color: #b6effb; }
+        .rank-None { background-color: #f8f9fa; color: #212529; }
+        
+        /* CSS cho Dropdown Status trong bảng */
+        .status-select { font-size: 0.85rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; border: 1px solid #ced4da; cursor: pointer; }
+        .status-active { color: #198754; border-color: #198754; }
+        .status-inactive { color: #dc3545; border-color: #dc3545; }
+
+        /* Pagination CSS */
+        .pagination { margin-bottom: 0; }
+        .page-link { color: #333; }
+        .page-item.active .page-link { background-color: #0d6efd; border-color: #0d6efd; color: white; }
     </style>
 </head>
 <body class="bg-light p-4">
@@ -142,9 +179,7 @@ $rankMap = [
     <div class="row">
         <div class="col-md-4 mb-4">
             <div class="card shadow-sm">
-                <div class="card-header text-primary">
-                    <i class="fas fa-plus-circle"></i> Tạo Voucher Mới
-                </div>
+                <div class="card-header text-primary"><i class="fas fa-plus-circle"></i> Tạo Voucher Mới</div>
                 <div class="card-body">
                     <form method="POST" action="">
                         <input type="hidden" name="action" value="create_voucher">
@@ -160,7 +195,6 @@ $rankMap = [
                                 <option value="Platinum">Bạch kim</option>
                             </select>
                         </div>
-
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Tên Voucher</label>
@@ -171,12 +205,10 @@ $rankMap = [
                                 <input type="text" class="form-control" name="Code" required placeholder="VD: SUMMER2024">
                             </div>
                         </div>
-
                         <div class="mb-3">
                             <label class="form-label">Mô tả</label>
                             <textarea class="form-control" name="Description" rows="2"></textarea>
                         </div>
-
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Loại giảm giá</label>
@@ -190,7 +222,6 @@ $rankMap = [
                                 <input type="number" class="form-control" name="DiscountValue" required placeholder="VD: 10 hoặc 50000">
                             </div>
                         </div>
-
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Đơn tối thiểu</label>
@@ -201,13 +232,11 @@ $rankMap = [
                                 <input type="number" class="form-control" name="MaxDiscount" value="0" placeholder="0 = KGH">
                             </div>
                         </div>
-
                         <div class="mb-3" id="pointContainer">
                             <label class="form-label fw-bold text-danger">Điểm cần đổi</label>
                             <input type="number" class="form-control" name="VoucherPoint" value="0">
                             <small class="text-muted">Chỉ nhập khi Hạng là "Chung"</small>
                         </div>
-
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Giới hạn số lượng</label>
@@ -216,13 +245,11 @@ $rankMap = [
                             <div class="col-6 mb-3">
                                 <label class="form-label">Trạng thái ban đầu</label>
                                 <select class="form-select" name="Status">
-                                    <option value="1">Đang áp dụng (1)</option>
-                                    <option value="0">Ngừng/Chờ (0)</option>
+                                    <option value="1">Active (1)</option>
+                                    <option value="0">Inactive (0)</option>
                                 </select>
-                                <small class="text-muted" style="font-size: 10px;">Nếu chọn 0, hệ thống sẽ tự bật khi đến Ngày bắt đầu.</small>
                             </div>
                         </div>
-
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Ngày bắt đầu</label>
@@ -233,7 +260,6 @@ $rankMap = [
                                 <input type="datetime-local" class="form-control" name="EndDate">
                             </div>
                         </div>
-
                         <button type="submit" class="btn btn-primary w-100">Lưu Voucher</button>
                     </form>
                 </div>
@@ -246,6 +272,8 @@ $rankMap = [
                     <span><i class="fas fa-list"></i> Danh Sách Voucher</span>
                     
                     <form method="GET" class="d-flex gap-2">
+                        <input type="hidden" name="tab" value="marketing">
+
                         <select name="rank" class="form-select form-select-sm" style="width: 150px;">
                             <option value="">-- Tất cả hạng --</option>
                             <?php foreach ($rankMap as $key => $label): ?>
@@ -255,14 +283,15 @@ $rankMap = [
                         
                         <select name="status" class="form-select form-select-sm" style="width: 150px;">
                             <option value="">-- Trạng thái --</option>
-                            <option value="1" <?= $filter_status === '1' ? 'selected' : '' ?>>Đang áp dụng</option>
-                            <option value="0" <?= $filter_status === '0' ? 'selected' : '' ?>>Ngừng áp dụng</option>
+                            <option value="1" <?= $filter_status === '1' ? 'selected' : '' ?>>Active</option>
+                            <option value="0" <?= $filter_status === '0' ? 'selected' : '' ?>>Inactive</option>
                         </select>
                         
                         <button type="submit" class="btn btn-sm btn-secondary">Lọc</button>
-                        <a href="admin-voucher-manager.php" class="btn btn-sm btn-outline-secondary">Reset</a>
+                        <a href="?tab=marketing" class="btn btn-sm btn-outline-secondary">Reset</a>
                     </form>
                 </div>
+
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-striped table-hover mb-0" style="font-size: 0.9rem;">
@@ -275,7 +304,7 @@ $rankMap = [
                                     <th>Thời gian</th>
                                     <th>SL/Đã dùng</th>
                                     <th>Điểm</th>
-                                    <th>Status</th>
+                                    <th>Trạng thái</th> 
                                 </tr>
                             </thead>
                             <tbody>
@@ -286,8 +315,17 @@ $rankMap = [
                                         <tr>
                                             <td><?= h($v['VoucherID']) ?></td>
                                             <td>
-                                                <strong><?= h($v['Code']) ?></strong><br>
+                                                <strong class="text-primary"><?= h($v['Code']) ?></strong><br>
                                                 <small><?= h($v['VoucherName']) ?></small>
+                                                <div class="mt-1 small text-muted" style="font-size: 0.8em;">
+                                                    <?php if ($v['MinOrder'] > 0): ?>
+                                                        <div>Đơn tối thiểu: <?= number_format($v['MinOrder'], 0, ',', '.') ?>đ</div>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if ($v['MaxDiscount'] > 0): ?>
+                                                        <div>Giảm tối đa: <?= number_format($v['MaxDiscount'], 0, ',', '.') ?>đ</div>
+                                                    <?php endif; ?>
+                                                </div>
                                             </td>
                                             <td>
                                                 <?php 
@@ -296,7 +334,7 @@ $rankMap = [
                                                 ?>
                                             </td>
                                             <td>
-                                                <span class="badge bg-info text-dark">
+                                                <span class="rank-badge rank-<?= $v['RankRequirement'] ?>">
                                                     <?= isset($rankMap[$v['RankRequirement']]) ? $rankMap[$v['RankRequirement']] : $v['RankRequirement'] ?>
                                                 </span>
                                             </td>
@@ -306,9 +344,7 @@ $rankMap = [
                                                     End: <?= $v['EndDate'] ? date('d/m/y H:i', strtotime($v['EndDate'])) : '∞' ?>
                                                 </small>
                                             </td>
-                                            <td>
-                                                <?= $v['UsedCount'] ?> / <?= $v['UsageLimit'] ?>
-                                            </td>
+                                            <td><?= $v['UsedCount'] ?> / <?= $v['UsageLimit'] ?></td>
                                             <td>
                                                 <?php if($v['RankRequirement'] == 'None'): ?>
                                                     <strong><?= number_format($v['VoucherPoint']) ?></strong>
@@ -316,11 +352,26 @@ $rankMap = [
                                                     <span class="text-muted">-</span>
                                                 <?php endif; ?>
                                             </td>
+                                            
                                             <td>
-                                                <span class="status-badge-<?= $v['Status'] ?>">
-                                                    <?= $v['Status'] == 1 ? 'Active' : 'Inactive' ?>
-                                                </span>
+                                                <form method="POST">
+                                                    <input type="hidden" name="action" value="update_status_quick">
+                                                    <input type="hidden" name="voucher_id" value="<?= h($v['VoucherID']) ?>">
+                                                    
+                                                    <?php 
+                                                        $currentStatus = (int)$v['Status']; 
+                                                        $dropdownClass = ($currentStatus === 1) ? 'status-active' : 'status-inactive';
+                                                    ?>
+
+                                                    <select name="new_status" class="form-select form-select-sm status-select <?= $dropdownClass ?>" 
+                                                            style="width: 110px;" 
+                                                            onchange="this.form.submit()">
+                                                        <option value="1" <?= $currentStatus === 1 ? 'selected' : '' ?> style="color: #198754; font-weight: bold;">Active</option>
+                                                        <option value="0" <?= $currentStatus === 0 ? 'selected' : '' ?> style="color: #dc3545; font-weight: bold;">Inactive</option>
+                                                    </select>
+                                                </form>
                                             </td>
+
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -328,6 +379,35 @@ $rankMap = [
                         </table>
                     </div>
                 </div>
+
+                <div class="card-footer d-flex justify-content-between align-items-center">
+                    <small class="text-muted">
+                        Hiển thị <?= count($vouchers) ?> / <?= $total_rows ?> voucher
+                    </small>
+                    
+                    <?php if ($total_pages > 1): ?>
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm m-0">
+                            <li class="page-item <?= ($page <= 1) ? 'disabled' : '' ?>">
+                                <a class="page-link" href="?tab=marketing&page=<?= $page - 1 ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">Trước</a>
+                            </li>
+
+                            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                                <li class="page-item <?= ($page == $i) ? 'active' : '' ?>">
+                                    <a class="page-link" href="?tab=marketing&page=<?= $i ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">
+                                        <?= $i ?>
+                                    </a>
+                                </li>
+                            <?php endfor; ?>
+
+                            <li class="page-item <?= ($page >= $total_pages) ? 'disabled' : '' ?>">
+                                <a class="page-link" href="?tab=marketing&page=<?= $page + 1 ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">Sau</a>
+                            </li>
+                        </ul>
+                    </nav>
+                    <?php endif; ?>
+                </div>
+
             </div>
         </div>
     </div>
@@ -338,19 +418,15 @@ $rankMap = [
         var rankSelect = document.getElementById('rankSelect');
         var pointContainer = document.getElementById('pointContainer');
         var pointInput = pointContainer.querySelector('input');
-
-        // Logic: Nếu chọn 'None' (Chung) thì hiện ô nhập điểm, ngược lại thì ẩn
         if (rankSelect.value === 'None') {
             pointContainer.style.display = 'block';
             pointInput.disabled = false;
         } else {
             pointContainer.style.display = 'none';
-            pointInput.value = 0; // Reset về 0
-            pointInput.disabled = true; // Disable để không gửi lên server (hoặc gửi 0)
+            pointInput.value = 0; 
+            pointInput.disabled = true;
         }
     }
-
-    // Chạy hàm 1 lần khi load trang để set đúng trạng thái ban đầu
     window.onload = togglePointInput;
 </script>
 
