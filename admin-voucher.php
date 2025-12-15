@@ -15,36 +15,70 @@ if (!function_exists('h')) {
 $message = '';
 $error = '';
 
-// ============================================================================
-// 1. XỬ LÝ CẬP NHẬT TRẠNG THÁI NHANH (DROPDOWN)
-// ============================================================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status_quick') {
-    $v_id = $_POST['voucher_id'];
-    $new_status = (int)$_POST['new_status']; 
+// --- LOGIC TỰ ĐỘNG CẬP NHẬT TRẠNG THÁI THEO THỜI GIAN (GIỮ NGUYÊN) ---
+try {
+    $now = new DateTime('now', new DateTimeZone('Asia/Ho_Chi_Minh'));
+    $nowStr = $now->format('Y-m-d H:i:s');
 
+    // Kích hoạt voucher đến giờ
+    $stmtActivate = $pdo->prepare("UPDATE Voucher SET Status = 1 WHERE Status = 0 AND StartDate <= :now");
+    $stmtActivate->bindValue(':now', $nowStr);
+    $stmtActivate->execute();
+} catch (Exception $e) {}
+
+try {
+    // Hết hạn voucher
+    $stmtExpire = $pdo->prepare("
+        UPDATE Voucher
+        SET Status = 0
+        WHERE Status = 1
+          AND EndDate IS NOT NULL
+          AND EndDate < :now
+    ");
+    $stmtExpire->bindValue(':now', $nowStr);
+    $stmtExpire->execute();
+} catch (Exception $e) {}
+
+try {
+    // Voucher set ngày chạy ở tương lai thì phải inactive
+    $stmtBeforeStartDate = $pdo->prepare("
+        UPDATE Voucher
+        SET Status = 0
+        WHERE StartDate > :now AND StartDate IS NOT NULL
+    ");
+    $stmtBeforeStartDate->bindValue(':now', $nowStr);
+    $stmtBeforeStartDate->execute();
+} catch (Exception $e) {}
+
+// ============================================================================
+// [THAY ĐỔI] 1. XỬ LÝ XÓA VOUCHER (CHỈ KHI STATUS = 0)
+// ============================================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_voucher') {
+    $v_id = $_POST['voucher_id'];
     try {
-        $stmt = $pdo->prepare("UPDATE Voucher SET Status = :status WHERE VoucherID = :id");
-        $stmt->bindValue(':status', $new_status, PDO::PARAM_INT);
-        $stmt->bindValue(':id', $v_id);
-        $stmt->execute();
-        
-        echo "<script>window.location.href = '?tab=marketing';</script>";
-        exit;
+        // Kiểm tra xem voucher có đang inactive không
+        $checkStmt = $pdo->prepare("SELECT Status FROM Voucher WHERE VoucherID = :id");
+        $checkStmt->execute([':id' => $v_id]);
+        $vStatus = $checkStmt->fetchColumn();
+
+        if ($vStatus === 0 || $vStatus === '0') {
+            $delStmt = $pdo->prepare("DELETE FROM Voucher WHERE VoucherID = :id");
+            $delStmt->execute([':id' => $v_id]);
+            $message = "Đã xóa voucher thành công!";
+        } else {
+            $error = "Chỉ có thể xóa Voucher đang ngưng hoạt động (Inactive)!";
+        }
     } catch (Exception $e) {
-        $error = "Lỗi cập nhật trạng thái: " . $e->getMessage();
+        $error = "Lỗi xóa: " . $e->getMessage();
     }
 }
 
 // ============================================================================
-// 2. XỬ LÝ TẠO VOUCHER MỚI
+// [THAY ĐỔI] 2. XỬ LÝ TẠO MỚI HOẶC CẬP NHẬT VOUCHER
 // ============================================================================
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'create_voucher') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST['action'] === 'create_voucher' || $_POST['action'] === 'update_voucher')) {
     try {
-        $stmtId = $pdo->query("SELECT MAX(CAST(SUBSTRING(VoucherID, 2) AS UNSIGNED)) as max_id FROM Voucher");
-        $next_id = ($stmtId->fetch()['max_id'] ?? 0) + 1;
-        $voucher_id = 'V' . str_pad($next_id, 5, '0', STR_PAD_LEFT);
-
-        // ... (Giữ nguyên logic lấy dữ liệu form) ...
+        // Lấy dữ liệu form chung
         $voucher_name = $_POST['VoucherName'];
         $code = $_POST['Code'];
         $desc = $_POST['Description'];
@@ -52,62 +86,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $value = $_POST['DiscountValue'];
         $min_order = $_POST['MinOrder'];
         $max_discount = $_POST['MaxDiscount'];
-        $start_date = str_replace('T', ' ', $_POST['StartDate']);
-        $end_date = !empty($_POST['EndDate']) ? str_replace('T', ' ', $_POST['EndDate']) : NULL;
         $usage_limit = $_POST['UsageLimit'];
-        $status = (int)$_POST['Status']; 
         $rank = $_POST['RankRequirement'];
         $point = ($rank === 'None') ? $_POST['VoucherPoint'] : 0;
 
-        $sql = "INSERT INTO Voucher (
-            VoucherID, VoucherName, Code, Description, DiscountType, DiscountValue, 
-            MinOrder, MaxDiscount, StartDate, EndDate, UsageLimit, UsedCount, 
-            VoucherPoint, Status, RankRequirement
-        ) VALUES (
-            :id, :name, :code, :desc, :type, :val, 
-            :min, :max, :start, :end, :limit, 0, 
-            :point, :status, :rank
-        )";
+        // Xử lý thời gian
+        $tz = new DateTimeZone('Asia/Ho_Chi_Minh');
+        $startRaw = $_POST['StartDate'];
+        $startDt = new DateTime($startRaw, $tz);
+        $start_date = $startDt->format('Y-m-d H:i:s');
 
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':id', $voucher_id);
-        $stmt->bindValue(':name', $voucher_name);
-        $stmt->bindValue(':code', $code);
-        $stmt->bindValue(':desc', $desc);
-        $stmt->bindValue(':type', $type);
-        $stmt->bindValue(':val', $value);
-        $stmt->bindValue(':min', $min_order);
-        $stmt->bindValue(':max', $max_discount);
-        $stmt->bindValue(':start', $start_date);
-        $stmt->bindValue(':end', $end_date);
-        $stmt->bindValue(':limit', $usage_limit);
-        $stmt->bindValue(':point', $point);
-        $stmt->bindValue(':status', $status, PDO::PARAM_INT); 
-        $stmt->bindValue(':rank', $rank);
+        $end_date = null;
+        if (!empty($_POST['EndDate'])) {
+            $endRaw = $_POST['EndDate'];
+            $endDt = new DateTime($endRaw, $tz);
+            $end_date = $endDt->format('Y-m-d H:i:s');
+        }
+
+        // Tính toán trạng thái dựa trên thời gian (Logic tự động)
+        $now = new DateTime('now', $tz);
+        if ($startDt > $now) {
+            $status = 0; // Chưa đến ngày -> Inactive
+        } else {
+            // Nếu có ngày kết thúc và đã qua ngày kết thúc -> Inactive, ngược lại Active
+            if ($end_date && $endDt < $now) {
+                $status = 0;
+            } else {
+                $status = 1;
+            }
+        }
+
+        if ($_POST['action'] === 'create_voucher') {
+            // --- LOGIC TẠO MỚI ---
+            $stmtId = $pdo->query("SELECT MAX(CAST(SUBSTRING(VoucherID, 2) AS UNSIGNED)) as max_id FROM Voucher");
+            $next_id = ($stmtId->fetch()['max_id'] ?? 0) + 1;
+            $voucher_id = 'V' . str_pad($next_id, 5, '0', STR_PAD_LEFT);
+
+            $sql = "INSERT INTO Voucher (
+                VoucherID, VoucherName, Code, Description, DiscountType, DiscountValue, 
+                MinOrder, MaxDiscount, StartDate, EndDate, UsageLimit, UsedCount, 
+                VoucherPoint, Status, RankRequirement
+            ) VALUES (
+                :id, :name, :code, :desc, :type, :val, 
+                :min, :max, :start, :end, :limit, 0, 
+                :point, :status, :rank
+            )";
+            $params = [
+                ':id' => $voucher_id, ':name' => $voucher_name, ':code' => $code, ':desc' => $desc,
+                ':type' => $type, ':val' => $value, ':min' => $min_order, ':max' => $max_discount,
+                ':start' => $start_date, ':end' => $end_date, ':limit' => $usage_limit,
+                ':point' => $point, ':status' => $status, ':rank' => $rank
+            ];
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $message = "Tạo voucher thành công! Mã: " . $code;
+
+        } else {
+            // --- LOGIC CẬP NHẬT ---
+            $voucher_id = $_POST['voucher_id']; // ID lấy từ hidden field
+            
+            $sql = "UPDATE Voucher SET 
+                VoucherName = :name, Code = :code, Description = :desc, DiscountType = :type, 
+                DiscountValue = :val, MinOrder = :min, MaxDiscount = :max, 
+                StartDate = :start, EndDate = :end, UsageLimit = :limit, 
+                VoucherPoint = :point, Status = :status, RankRequirement = :rank
+                WHERE VoucherID = :id";
+            
+            $params = [
+                ':name' => $voucher_name, ':code' => $code, ':desc' => $desc,
+                ':type' => $type, ':val' => $value, ':min' => $min_order, ':max' => $max_discount,
+                ':start' => $start_date, ':end' => $end_date, ':limit' => $usage_limit,
+                ':point' => $point, ':status' => $status, ':rank' => $rank, ':id' => $voucher_id
+            ];
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $message = "Cập nhật voucher thành công!";
+        }
         
-        $stmt->execute();
-
-        $message = "Tạo voucher thành công! Mã: " . $code;
+        // Refresh trang để xóa query param edit_id nếu có
         echo "<script>window.location.href = '?tab=marketing';</script>";
         exit;
-        
+
     } catch (Exception $e) {
-        $error = "Lỗi tạo voucher: " . $e->getMessage();
+        $error = "Lỗi xử lý: " . $e->getMessage();
     }
 }
 
 // ============================================================================
-// 3. XỬ LÝ LỌC & PHÂN TRANG (PAGINATION)
+// [THAY ĐỔI] 3. LẤY DỮ LIỆU ĐỂ EDIT (NẾU CÓ PARAM edit_id)
+// ============================================================================
+$editData = null;
+if (isset($_GET['edit_id'])) {
+    $stmtEdit = $pdo->prepare("SELECT * FROM Voucher WHERE VoucherID = ?");
+    $stmtEdit->execute([$_GET['edit_id']]);
+    $editData = $stmtEdit->fetch();
+}
+
+// ============================================================================
+// 4. XỬ LÝ LỌC & PHÂN TRANG (GIỮ NGUYÊN)
 // ============================================================================
 $filter_status = $_GET['status'] ?? '';
 $filter_rank = $_GET['rank'] ?? '';
-
-// [PHÂN TRANG] 1. Xác định trang hiện tại và số item mỗi trang
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 7; // Số voucher mỗi trang (Bạn có thể sửa số này)
+$limit = 7; 
 $offset = ($page - 1) * $limit;
 
-// Điều kiện lọc chung
 $whereClause = "WHERE 1=1";
 $params = [];
 
@@ -115,20 +198,17 @@ if ($filter_status !== '') {
     $whereClause .= " AND Status = ?";
     $params[] = $filter_status;
 }
-
 if ($filter_rank !== '') {
     $whereClause .= " AND RankRequirement = ?";
     $params[] = $filter_rank;
 }
 
-// [PHÂN TRANG] 2. Đếm tổng số bản ghi (để tính tổng số trang)
 $sqlCount = "SELECT COUNT(*) FROM Voucher " . $whereClause;
 $stmtCount = $pdo->prepare($sqlCount);
 $stmtCount->execute($params);
 $total_rows = $stmtCount->fetchColumn();
 $total_pages = ceil($total_rows / $limit);
 
-// [PHÂN TRANG] 3. Lấy dữ liệu với LIMIT và OFFSET
 $sqlList = "SELECT * FROM Voucher " . $whereClause . " ORDER BY StartDate DESC LIMIT $limit OFFSET $offset";
 $stmtList = $pdo->prepare($sqlList);
 $stmtList->execute($params);
@@ -144,21 +224,22 @@ $rankMap = [
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <style>
         .card-header { background-color: #f8f9fa; font-weight: bold; }
         
         /* CSS cho Badge Rank */
-        .rank-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; border: 1px solid #ccc; }
+        .rank-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; border: 1px solid #ccc; white-space: nowrap; }
         .rank-Gold { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
         .rank-Silver { background-color: #e2e3e5; color: #41464b; border-color: #d6d8db; }
         .rank-Bronze { background-color: #f8d7da; color: #842029; border-color: #f5c2c7; }
         .rank-Platinum { background-color: #cff4fc; color: #055160; border-color: #b6effb; }
         .rank-None { background-color: #f8f9fa; color: #212529; }
         
-        /* CSS cho Dropdown Status trong bảng */
-        .status-select { font-size: 0.85rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; border: 1px solid #ced4da; cursor: pointer; }
-        .status-active { color: #198754; border-color: #198754; }
-        .status-inactive { color: #dc3545; border-color: #dc3545; }
+        /* CSS Status Badge */
+        .badge-status { padding: 5px 10px; border-radius: 20px; font-size: 0.8em; font-weight: 600; }
+        .bg-active { background-color: #d1e7dd; color: #0f5132; }
+        .bg-inactive { background-color: #f8d7da; color: #842029; }
 
         /* Pagination CSS */
         .pagination { margin-bottom: 0; }
@@ -179,88 +260,112 @@ $rankMap = [
     <div class="row">
         <div class="col-md-4 mb-4">
             <div class="card shadow-sm">
-                <div class="card-header text-primary"><i class="fas fa-plus-circle"></i> Tạo Voucher Mới</div>
+                <div class="card-header text-primary">
+                    <?php if ($editData): ?>
+                        <i class="fas fa-edit"></i> Chỉnh sửa Voucher: <?= h($editData['Code']) ?>
+                    <?php else: ?>
+                        <i class="fas fa-plus-circle"></i> Tạo Voucher Mới
+                    <?php endif; ?>
+                </div>
                 <div class="card-body">
                     <form method="POST" action="">
-                        <input type="hidden" name="action" value="create_voucher">
+                        <input type="hidden" name="action" value="<?= $editData ? 'update_voucher' : 'create_voucher' ?>">
+                        
+                        <?php if ($editData): ?>
+                            <input type="hidden" name="voucher_id" value="<?= h($editData['VoucherID']) ?>">
+                        <?php endif; ?>
                         
                         <div class="mb-3">
                             <label class="form-label fw-bold">Hạng áp dụng</label>
                             <select class="form-select" name="RankRequirement" id="rankSelect" required onchange="togglePointInput()">
-                                <option value="None">Chung (Cần đổi điểm)</option>
-                                <option value="Free">Miễn phí (Tặng)</option>
-                                <option value="Bronze">Đồng</option>
-                                <option value="Silver">Bạc</option>
-                                <option value="Gold">Vàng</option>
-                                <option value="Platinum">Bạch kim</option>
+                                <?php 
+                                    $currentRank = $editData['RankRequirement'] ?? 'None';
+                                    foreach ($rankMap as $rKey => $rLabel) {
+                                        $selected = ($currentRank === $rKey) ? 'selected' : '';
+                                        echo "<option value='$rKey' $selected>$rLabel</option>";
+                                    }
+                                ?>
                             </select>
                         </div>
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Tên Voucher</label>
-                                <input type="text" class="form-control" name="VoucherName" required placeholder="VD: Giảm giá hè">
+                                <input type="text" class="form-control" name="VoucherName" required 
+                                       placeholder="VD: Giảm giá hè" value="<?= h($editData['VoucherName'] ?? '') ?>">
                             </div>
                             <div class="col-6 mb-3">
-                                <label class="form-label">Mã Code (Unique)</label>
-                                <input type="text" class="form-control" name="Code" required placeholder="VD: SUMMER2024">
+                                <label class="form-label">Mã Code</label>
+                                <input type="text" class="form-control" name="Code" required 
+                                       placeholder="VD: SUMMER2024" value="<?= h($editData['Code'] ?? '') ?>">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Mô tả</label>
-                            <textarea class="form-control" name="Description" rows="2"></textarea>
+                            <textarea class="form-control" name="Description" rows="2"><?= h($editData['Description'] ?? '') ?></textarea>
                         </div>
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Loại giảm giá</label>
                                 <select class="form-select" name="DiscountType">
-                                    <option value="PERCENT">Phần trăm (%)</option>
-                                    <option value="AMOUNT">Số tiền (VND)</option>
+                                    <?php $dType = $editData['DiscountType'] ?? 'PERCENT'; ?>
+                                    <option value="PERCENT" <?= $dType == 'PERCENT' ? 'selected' : '' ?>>Phần trăm (%)</option>
+                                    <option value="AMOUNT" <?= $dType == 'AMOUNT' ? 'selected' : '' ?>>Số tiền (VND)</option>
                                 </select>
                             </div>
                             <div class="col-6 mb-3">
                                 <label class="form-label">Giá trị giảm</label>
-                                <input type="number" class="form-control" name="DiscountValue" required placeholder="VD: 10 hoặc 50000">
+                                <input type="number" class="form-control" name="DiscountValue" required 
+                                       placeholder="VD: 10 hoặc 50000" value="<?= h($editData['DiscountValue'] ?? '') ?>">
                             </div>
                         </div>
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Đơn tối thiểu</label>
-                                <input type="number" class="form-control" name="MinOrder" value="0">
+                                <input type="number" class="form-control" name="MinOrder" 
+                                       value="<?= h($editData['MinOrder'] ?? '0') ?>">
                             </div>
                             <div class="col-6 mb-3">
                                 <label class="form-label">Giảm tối đa</label>
-                                <input type="number" class="form-control" name="MaxDiscount" value="0" placeholder="0 = KGH">
+                                <input type="number" class="form-control" name="MaxDiscount" 
+                                       value="<?= h($editData['MaxDiscount'] ?? '0') ?>" placeholder="0 = KGH">
                             </div>
                         </div>
                         <div class="mb-3" id="pointContainer">
                             <label class="form-label fw-bold text-danger">Điểm cần đổi</label>
-                            <input type="number" class="form-control" name="VoucherPoint" value="0">
+                            <input type="number" class="form-control" name="VoucherPoint" 
+                                   value="<?= h($editData['VoucherPoint'] ?? '0') ?>">
                             <small class="text-muted">Chỉ nhập khi Hạng là "Chung"</small>
                         </div>
-                        <div class="row">
-                            <div class="col-6 mb-3">
+                        <div class="mb-3">
                                 <label class="form-label">Giới hạn số lượng</label>
-                                <input type="number" class="form-control" name="UsageLimit" value="100" required>
-                            </div>
-                            <div class="col-6 mb-3">
-                                <label class="form-label">Trạng thái ban đầu</label>
-                                <select class="form-select" name="Status">
-                                    <option value="1">Active (1)</option>
-                                    <option value="0">Inactive (0)</option>
-                                </select>
-                            </div>
+                                <input type="number" class="form-control" name="UsageLimit" 
+                                       value="<?= h($editData['UsageLimit'] ?? '100') ?>" required>
                         </div>
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Ngày bắt đầu</label>
-                                <input type="datetime-local" class="form-control" name="StartDate" required>
+                                <?php 
+                                    $sDate = isset($editData['StartDate']) ? date('Y-m-d\TH:i', strtotime($editData['StartDate'])) : '';
+                                ?>
+                                <input type="datetime-local" class="form-control" name="StartDate" required value="<?= $sDate ?>">
                             </div>
                             <div class="col-6 mb-3">
                                 <label class="form-label">Ngày hết hạn</label>
-                                <input type="datetime-local" class="form-control" name="EndDate">
+                                <?php 
+                                    $eDate = isset($editData['EndDate']) ? date('Y-m-d\TH:i', strtotime($editData['EndDate'])) : '';
+                                ?>
+                                <input type="datetime-local" class="form-control" name="EndDate" value="<?= $eDate ?>">
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary w-100">Lưu Voucher</button>
+                        
+                        <?php if ($editData): ?>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-warning w-50 fw-bold">Cập nhật</button>
+                                <a href="?tab=marketing" class="btn btn-outline-secondary w-50">Hủy / Tạo mới</a>
+                            </div>
+                        <?php else: ?>
+                            <button type="submit" class="btn btn-primary w-100">Lưu Voucher</button>
+                        <?php endif; ?>
                     </form>
                 </div>
             </div>
@@ -305,11 +410,12 @@ $rankMap = [
                                     <th>SL/Đã dùng</th>
                                     <th>Điểm</th>
                                     <th>Trạng thái</th> 
+                                    <th class="text-center">Hành động</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php if (empty($vouchers)): ?>
-                                    <tr><td colspan="8" class="text-center p-3">Không có voucher nào.</td></tr>
+                                    <tr><td colspan="9" class="text-center p-3">Không có voucher nào.</td></tr>
                                 <?php else: ?>
                                     <?php foreach ($vouchers as $v): ?>
                                         <tr>
@@ -354,22 +460,30 @@ $rankMap = [
                                             </td>
                                             
                                             <td>
-                                                <form method="POST">
-                                                    <input type="hidden" name="action" value="update_status_quick">
-                                                    <input type="hidden" name="voucher_id" value="<?= h($v['VoucherID']) ?>">
-                                                    
-                                                    <?php 
-                                                        $currentStatus = (int)$v['Status']; 
-                                                        $dropdownClass = ($currentStatus === 1) ? 'status-active' : 'status-inactive';
-                                                    ?>
+                                                <?php if ($v['Status'] == 1): ?>
+                                                    <span class="badge-status bg-active">Active</span>
+                                                <?php else: ?>
+                                                    <span class="badge-status bg-inactive">Inactive</span>
+                                                <?php endif; ?>
+                                            </td>
 
-                                                    <select name="new_status" class="form-select form-select-sm status-select <?= $dropdownClass ?>" 
-                                                            style="width: 110px;" 
-                                                            onchange="this.form.submit()">
-                                                        <option value="1" <?= $currentStatus === 1 ? 'selected' : '' ?> style="color: #198754; font-weight: bold;">Active</option>
-                                                        <option value="0" <?= $currentStatus === 0 ? 'selected' : '' ?> style="color: #dc3545; font-weight: bold;">Inactive</option>
-                                                    </select>
-                                                </form>
+                                            <td class="text-center">
+                                                <div class="d-flex justify-content-center gap-2">
+                                                    <a href="?tab=marketing&edit_id=<?= h($v['VoucherID']) ?>" 
+                                                       class="btn btn-sm btn-outline-primary" title="Sửa">
+                                                        <i class="fas fa-edit"></i>
+                                                    </a>
+
+                                                    <?php if ($v['Status'] == 0): ?>
+                                                        <form method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa voucher này không?');">
+                                                            <input type="hidden" name="action" value="delete_voucher">
+                                                            <input type="hidden" name="voucher_id" value="<?= h($v['VoucherID']) ?>">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Xóa">
+                                                                <i class="fas fa-trash-alt"></i>
+                                                            </button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                </div>
                                             </td>
 
                                         </tr>
@@ -423,7 +537,8 @@ $rankMap = [
             pointInput.disabled = false;
         } else {
             pointContainer.style.display = 'none';
-            pointInput.value = 0; 
+            // Không reset về 0 ở đây nếu đang edit, nhưng khi submit logic PHP sẽ xử lý.
+            // Để UI sạch sẽ:
             pointInput.disabled = true;
         }
     }
