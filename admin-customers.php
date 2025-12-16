@@ -1,6 +1,6 @@
 <?php
 require_once 'db_connect.php';
-
+$currentUserId = null;
 // ================= LOAD VOUCHER CỦA USER =================
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'load_voucher') {
 
@@ -11,7 +11,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'load_voucher') {
     }
 
     $stmt = $pdo->prepare("
-        SELECT v.VoucherName, v.Code, v.DiscountType, v.DiscountValue, v.EndDate, uv.DateReceived
+        SELECT 
+    v.VoucherID,
+    v.VoucherName,
+    v.Code,
+    v.EndDate,
+    uv.DateReceived
         FROM User_Voucher uv
         JOIN Voucher v ON uv.VoucherID = v.VoucherID
         WHERE uv.UserID = ?
@@ -27,14 +32,30 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'load_voucher') {
 
     echo "<ul class='list-group'>";
     foreach ($vouchers as $v) {
+
+        $voucherName = htmlspecialchars($v['VoucherName']);
+        $code = htmlspecialchars($v['Code']);
+        $received = date('d/m/Y', strtotime($v['DateReceived']));
+        $endDate = $v['EndDate']
+            ? date('d/m/Y', strtotime($v['EndDate']))
+            : 'Không';
+
         echo "
-        <li class='list-group-item'>
-            <strong>{$v['VoucherName']}</strong>
-            <div>Mã: {$v['Code']}</div>
-            <div>Nhận: " . date('d/m/Y', strtotime($v['DateReceived'])) . "</div>
-            <div>Hết hạn: " . ($v['EndDate'] ? date('d/m/Y', strtotime($v['EndDate'])) : 'Không') . "</div>
-        </li>";
+    <li class='list-group-item d-flex justify-content-between align-items-start'>
+        <div>
+            <strong>{$voucherName}</strong>
+            <div>Mã: {$code}</div>
+            <div>Nhận: {$received}</div>
+            <div>Hết hạn: {$endDate}</div>
+        </div>
+
+        <button class='btn btn-sm btn-outline-danger'
+            onclick=\"removeVoucher('{$userId}', '{$v['VoucherID']}')\">
+            ❌
+        </button>
+    </li>";
     }
+
     echo "</ul>";
     exit;
 }
@@ -62,10 +83,8 @@ if (
         echo json_encode(['success' => false, 'message' => 'Khách đã có voucher này']);
         exit;
     }
-
-    $newId = generateVoucherId($pdo);
-
-    $pdo->prepare("
+    $newId = uniqid(prefix: 'UV_');
+    $pdo->prepare(query: "
         INSERT INTO User_Voucher (ID, UserID, VoucherID, DateReceived)
         VALUES (?, ?, ?, NOW())
     ")->execute([$newId, $uid, $vid]);
@@ -74,9 +93,43 @@ if (
         UPDATE Voucher SET UsedCount = UsedCount + 1
         WHERE VoucherID = ?
     ")->execute([$vid]);
-
+    header('Content-Type: application/json');
     echo json_encode(['success' => true]);
     exit;
+}
+// ================= XÓA VOUCHER CỦA USER =================
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['ajax'])
+    && $_POST['ajax'] === 'remove_voucher'
+) {
+    if (ob_get_length())
+        ob_clean();
+    $uid = $_POST['user_id'] ?? '';
+    $vid = $_POST['voucher_id'] ?? '';
+    header('Content-Type: application/json; charset=utf-8');
+    if ($uid === '' || $vid === '') {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Thiếu dữ liệu']);
+        exit;
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            DELETE FROM User_Voucher
+            WHERE UserID = ? AND VoucherID = ?
+        ");
+        $stmt->execute([$uid, $vid]);
+
+
+        echo json_encode(['success' => true]);
+        exit;
+
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit;
+    }
 }
 
 
@@ -253,17 +306,13 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
             const button = event.relatedTarget; // nút bấm
             const userId = button.getAttribute('data-userid');
             const username = button.getAttribute('data-username');
-
+            currentUserId = userId;
             // set tên user
             document.getElementById('modalUsername').innerText = username;
             document.getElementById('voucherUserId').value = userId;
 
             // load voucher
-            fetch('admin-dashboard.php?tab=customers&ajax=load_voucher&user_id=' + userId)
-                .then(res => res.text())
-                .then(html => {
-                    document.getElementById('voucherList').innerHTML = html;
-                });
+            loadVoucherList(userId);
         });
 
         // gán voucher
@@ -279,20 +328,65 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
             })
                 .then(res => res.json())
                 .then(data => {
-                    if (!data.success) {
-                        alert(data.message);
+                    if (data.success) {
+                        alert('Đã gán voucher thành công');
+
+                        
+                        loadVoucherList(currentUsserId);
                         return;
                     }
 
-                    // reload danh sách voucher
-                    const uid = document.getElementById('voucherUserId').value;
-                    fetch('admin-dashboard.php?tab=customers&ajax=load_voucher&user_id=' + uid)
-                        .then(res => res.text())
-                        .then(html => {
-                            document.getElementById('voucherList').innerHTML = html;
-                        });
                 });
         });
+        //reload voucher
+        function loadVoucherList(userId) {
+            fetch('admin-dashboard.php?tab=customers&ajax=load_voucher&user_id=' + userId, {
+                cache: 'no-store'
+            })
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById('voucherList').innerHTML = html;
+                });
+        }
+        //xóa voucher
+        function removeVoucher(userId, voucherId) {
+            if (!confirm('Xóa voucher này khỏi khách hàng?')) return;
+
+            const fd = new FormData();
+            fd.append('ajax', 'remove_voucher');
+            fd.append('user_id', userId);
+            fd.append('voucher_id', voucherId);
+
+            fetch('admin-dashboard.php?tab=customers', {
+                method: 'POST',
+                body: fd
+            })
+                .then(async (res) => {
+                    const text = await res.text();      // <-- lấy text trước
+                    console.log('REMOVE response status:', res.status);
+                    console.log('REMOVE response text:', text);
+
+                    // thử parse JSON
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        throw new Error('Server không trả JSON (xem Console log)');
+                    }
+
+                    if (!data.success) {
+                        alert(data.message || 'Xóa thất bại');
+                        return;
+                    }
+
+                    // reload list
+                    loadVoucherList(userId);
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Lỗi JS khi xóa voucher (mở F12 -> Console xem response)');
+                });
+        }
 
     </script>
 </body>
