@@ -49,86 +49,127 @@ function h($str)
 
 <body class="account-body admin-page">
     <?php if (!$isAjax): ?>
-    <!-- ===================== HEADER ===================== -->
-    <header class="account-header site-header">
-        <div class="container header-inner">
-            <div class="header-left">
-                <a href="shop.php" class="logo-link">
-                    <span class="account-logo">Moonlit</span>
-                </a>
-                
-            </div>
+        <!-- ===================== HEADER (giống vibe index/cart) ===================== -->
+        <header class="account-header site-header">
+            <div class="container header-inner">
+                <div class="header-left">
+                    <a href="shop.php" class="logo-link">
+                        <span class="account-logo">Moonlit</span>
+                    </a>
 
-            <div class="header-right">
-                <span class="account-username d-none d-sm-inline">
-                    Xin chào, <strong><?php echo h($currentUsername); ?></strong>
-                </span>
-                <a href="index.php" class="account-btn-secondary header-account-btn">
-                    Xem cửa hàng
-                </a>
-                <a href="logout.php" class="account-btn-secondary header-account-btn">
-                    Đăng xuất
-                </a>
-            </div>
-        </div>
-    </header>
-    
-
-
-    <!-- ===================== MAIN ===================== -->
-    <main class="account-main">
-        <div class="container">
-
-            <h1 class="account-section-title mb-3">
-                Bảng điều khiển Admin
-            </h1>
-
-            <?php if ($success_message): ?>
-                <div class="alert alert-success account-alert">
-                    <?php echo h($success_message); ?>
                 </div>
-            <?php endif; ?>
 
-            <?php if ($error_message): ?>
-                <div class="alert alert-danger account-alert">
-                    <?php echo h($error_message); ?>
+                <div class="header-right">
+                    <span class="account-username d-none d-sm-inline">
+                        Xin chào, <strong><?php echo h($currentUsername); ?></strong>
+                    </span>
+                    <a href="index.php" class="account-btn-secondary header-account-btn">
+                        Xem cửa hàng
+                    </a>
+                    <a href="logout.php" class="account-btn-secondary header-account-btn">
+                        Đăng xuất
+                    </a>
                 </div>
-            <?php endif; ?>
-
-            <!-- NAV TAB -->
-            <nav class="admin-tabs">
-                <a href="?tab=overview"
-                    class="admin-tab-link <?php echo $tab === 'overview' ? 'admin-tab-link-active' : ''; ?>">
-                    Tổng quan
-                </a>
-                <a href="?tab=orders"
-                    class="admin-tab-link <?php echo $tab === 'orders' ? 'admin-tab-link-active' : ''; ?>">
-                    Đơn hàng
-                </a>
-                <a href="?tab=products"
-                    class="admin-tab-link <?php echo $tab === 'products' ? 'admin-tab-link-active' : ''; ?>">
-                    Sản phẩm
-                </a>
-                <a href="?tab=posts"
-                    class="admin-tab-link <?php echo $tab === 'posts' ? 'admin-tab-link-active' : ''; ?>">
-                    Bài đăng
-                </a>
-                <a href="?tab=customers"
-                    class="admin-tab-link <?php echo $tab === 'customers' ? 'admin-tab-link-active' : ''; ?>">
-                    Khách hàng
-                </a>
-                <a href="?tab=marketing"
-                    class="admin-tab-link <?php echo $tab === 'marketing' ? 'admin-tab-link-active' : ''; ?>">
-                    Kênh marketing
-                </a>
-
-                <a href="?tab=setting"
-                    class="admin-tab-link <?php echo $tab === 'setting' ? 'admin-tab-link-active' : ''; ?>">
-                    Cài đặt chung
-                </a>
+            </div>
+        </header>
 
 
-            </nav>
+
+        <!-- ===================== MAIN ===================== -->
+        <main class="account-main">
+            <div class="container">
+
+                <h1 class="account-section-title mb-3">
+                    Bảng điều khiển Admin
+                </h1>
+
+                <?php if ($success_message): ?>
+                    <div class="alert alert-success account-alert">
+                        <?php echo h($success_message); ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($error_message): ?>
+                    <div class="alert alert-danger account-alert">
+                        <?php echo h($error_message); ?>
+                    </div>
+                <?php endif; ?>
+
+                <!-- NAV TAB -->
+                <nav class="admin-nav mb-4">
+                    <ul class="admin-nav-list">
+
+                        <li>
+                            <a class="<?= $tab === 'overview' ? 'active' : '' ?>" href="?tab=overview">Tổng quan</a>
+                        </li>
+
+                        <li>
+                            <a class="<?= $tab === 'orders' ? 'active' : '' ?>" href="?tab=orders">Đơn hàng</a>
+                        </li>
+
+                        <li>
+                            <a class="<?= $tab === 'products' ? 'active' : '' ?>" href="?tab=products">Sản phẩm</a>
+                        </li>
+
+                        <li>
+                            <a class="<?= $tab === 'customers' ? 'active' : '' ?>" href="?tab=customers">Khách hàng</a>
+                        </li>
+
+                        <li class="dropdown">
+                            <a class="dropdown-toggle <?= in_array($tab, ['voucher', 'posts']) ? 'active' : '' ?>" href="#"
+                                data-bs-toggle="dropdown">
+                                Marketing
+                            </a>
+
+                            <ul class="admin-dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item <?= $tab === 'voucher' ? 'active' : '' ?>" href="?tab=voucher">
+                                        Voucher
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item <?= $tab === 'posts' ? 'active' : '' ?>" href="?tab=posts">
+                                        Blog
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item <?= $tab === 'forum' ? 'active' : '' ?>" href="?tab=forum">
+                                        Forum
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        <li>
+                            <a class="<?= $tab === 'employee' ? 'active' : '' ?>" href="?tab=employee">Nhân viên</a>
+                        </li>
+                        <li class="dropdown">
+                            <a class="dropdown-toggle <?= in_array($tab, ['voucher', 'posts']) ? 'active' : '' ?>" href="#"
+                                data-bs-toggle="dropdown">
+                                Đối tác
+                            </a>
+
+                            <ul class="admin-dropdown-menu">
+                                <li>
+                                    <a class="dropdown-item <?= $tab === 'carriers' ? 'active' : '' ?>" href="?tab=carriers">
+                                        Đơn vị vận chuyển
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item <?= $tab === 'publishers' ? 'active' : '' ?>" href="?tab=publishers">
+                                        Nhà xuất bản
+                                    </a>
+                                </li>
+                                
+                            </ul>
+                        </li>
+                        <li>
+                            <a class="<?= $tab === 'setting' ? 'active' : '' ?>" href="?tab=setting">Cài đặt</a>
+                        </li>
+
+                    </ul>
+                </nav>
+
             <?php endif; ?>
             <?php
             // ================= TAB ROUTER =================
@@ -138,7 +179,12 @@ function h($str)
                 'products',
                 'posts',
                 'customers',
-                'marketing',
+                'voucher',
+                'employee',
+                'blog',
+                'forum',
+                'publishers',
+                'carriers',
                 'setting'
             ];
 
@@ -158,11 +204,41 @@ function h($str)
         </div>
     </main>
     <?php if (!$isAjax): ?>
-    <!-- ===================== FOOTER ===================== -->
-    <footer class="site-footer">
-        © <?php echo date('Y'); ?> Moonlit — All rights reserved.
-    </footer>
+        <!-- ===================== FOOTER ===================== -->
+        <footer class="site-footer">
+            © <?php echo date('Y'); ?> Moonlit — All rights reserved.
+        </footer>
     <?php endif; ?>
+    <script>
+        function toggleMarketingMenu() {
+            document.getElementById('marketingSubMenu')
+                .classList.toggle('show');
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.querySelectorAll('.admin-nav .dropdown-toggle').forEach(toggle => {
+            toggle.addEventListener('click', function (e) {
+                e.preventDefault();
+
+                const li = this.closest('.dropdown');
+                document.querySelectorAll('.admin-nav .dropdown').forEach(d => {
+                    if (d !== li) d.classList.remove('show');
+                });
+
+                li.classList.toggle('show');
+            });
+        });
+
+        // Click ra ngoài thì đóng
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest('.admin-nav .dropdown')) {
+                document.querySelectorAll('.admin-nav .dropdown')
+                    .forEach(d => d.classList.remove('show'));
+            }
+        });
+    </script>
+
 </body>
 
 </html>
