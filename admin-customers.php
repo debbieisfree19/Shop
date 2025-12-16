@@ -199,8 +199,7 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <body class="account-body admin-page">
     <div class="account-card">
-        <h2 class="account-card-title">Danh sách khách hàng</h2>
-
+        <h2 class="account-section-title">Danh sách khách hàng</h2>
         <?php if (empty($customers)): ?>
             <p>Chưa có khách hàng nào.</p>
         <?php else: ?>
