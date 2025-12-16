@@ -387,6 +387,7 @@ catch (Exception $e) {
 </head>
 
 <body class="account-body admin-page">
+    <h2 class="account-section-title">Danh sách sản phẩm</h2>
     <main class="account-main">
         <?php if ($success_message): ?>
             <div class="alert alert-success account-alert">
