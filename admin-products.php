@@ -370,7 +370,8 @@ GROUP BY p.ProductID;
     $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-} catch (Exception $e) {
+} 
+catch (Exception $e) {
     $error_message = 'Không thể tải danh sách sản phẩm: ' . $e->getMessage();
 }
 ?>
