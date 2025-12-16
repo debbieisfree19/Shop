@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST[
         }
         
         // Refresh trang để xóa query param edit_id nếu có
-        echo "<script>window.location.href = '?tab=marketing';</script>";
+        echo "<script>window.location.href = '?tab=voucher';</script>";
         exit;
 
     } catch (Exception $e) {
@@ -361,7 +361,7 @@ $rankMap = [
                         <?php if ($editData): ?>
                             <div class="d-flex gap-2">
                                 <button type="submit" class="btn btn-warning w-50 fw-bold">Cập nhật</button>
-                                <a href="?tab=marketing" class="btn btn-outline-secondary w-50">Hủy / Tạo mới</a>
+                                <a href="?tab=voucher" class="btn btn-outline-secondary w-50">Hủy / Tạo mới</a>
                             </div>
                         <?php else: ?>
                             <button type="submit" class="btn btn-primary w-100">Lưu Voucher</button>
@@ -393,7 +393,7 @@ $rankMap = [
                         </select>
                         
                         <button type="submit" class="btn btn-sm btn-secondary">Lọc</button>
-                        <a href="?tab=marketing" class="btn btn-sm btn-outline-secondary">Reset</a>
+                        <a href="?tab=voucher" class="btn btn-sm btn-outline-secondary">Reset</a>
                     </form>
                 </div>
 
@@ -469,7 +469,7 @@ $rankMap = [
 
                                             <td class="text-center">
                                                 <div class="d-flex justify-content-center gap-2">
-                                                    <a href="?tab=marketing&edit_id=<?= h($v['VoucherID']) ?>" 
+                                                    <a href="?tab=voucher&edit_id=<?= h($v['VoucherID']) ?>" 
                                                        class="btn btn-sm btn-outline-primary" title="Sửa">
                                                         <i class="fas fa-edit"></i>
                                                     </a>
@@ -503,19 +503,19 @@ $rankMap = [
                     <nav aria-label="Page navigation">
                         <ul class="pagination pagination-sm m-0">
                             <li class="page-item <?= ($page <= 1) ? 'disabled' : '' ?>">
-                                <a class="page-link" href="?tab=marketing&page=<?= $page - 1 ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">Trước</a>
+                                <a class="page-link" href="?tab=voucher&page=<?= $page - 1 ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">Trước</a>
                             </li>
 
                             <?php for ($i = 1; $i <= $total_pages; $i++): ?>
                                 <li class="page-item <?= ($page == $i) ? 'active' : '' ?>">
-                                    <a class="page-link" href="?tab=marketing&page=<?= $i ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">
+                                    <a class="page-link" href="?tab=voucher&page=<?= $i ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">
                                         <?= $i ?>
                                     </a>
                                 </li>
                             <?php endfor; ?>
 
                             <li class="page-item <?= ($page >= $total_pages) ? 'disabled' : '' ?>">
-                                <a class="page-link" href="?tab=marketing&page=<?= $page + 1 ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">Sau</a>
+                                <a class="page-link" href="?tab=voucher&page=<?= $page + 1 ?>&rank=<?= h($filter_rank) ?>&status=<?= h($filter_status) ?>">Sau</a>
                             </li>
                         </ul>
                     </nav>
