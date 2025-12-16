@@ -113,13 +113,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// 4. LẤY DỮ LIỆU ĐƠN HÀNG (GET)
-$filter = $_GET['status'] ?? 'ALL';
-$returnFilter = $_GET['return_filter'] ?? ''; // Lấy thêm tham số lọc trả hàng
-$searchId = isset($_GET['search_id']) ? trim($_GET['search_id']) : ''; // [MỚI] Lấy từ khóa tìm kiếm Order ID
+// 4. LẤY DỮ LIỆU ĐƠN HÀNG (GET) & PHÂN TRANG
+$filter       = $_GET['status'] ?? 'ALL';
+$returnFilter = $_GET['return_filter'] ?? '';
+$searchId     = isset($_GET['search_id']) ? trim($_GET['search_id']) : '';
 
+// --- CẤU HÌNH PHÂN TRANG ---
+$page  = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$limit = 10; // Số đơn hàng hiển thị trên 1 trang (bạn có thể sửa số này)
+$page  = max($page, 1); // Đảm bảo page luôn >= 1
+$offset = ($page - 1) * $limit;
+
+// --- XÂY DỰNG WHERE CLAUSE (Dùng chung cho cả đếm tổng và lấy dữ liệu) ---
+$whereSql = " WHERE 1=1 ";
 $params = [];
 
+// Lọc theo Mã Đơn Hàng
+if (!empty($searchId)) {
+    $whereSql .= " AND o.OrderID LIKE ?";
+    $params[] = "%$searchId%";
+}
+
+// Lọc theo Trạng thái
+if ($filter !== 'ALL') {
+    if ($filter === 'Trả hàng' && !empty($returnFilter)) {
+        $realStatus = $returnStatuses[$returnFilter] ?? '';
+        if ($realStatus) {
+            $whereSql .= " AND ro.Status = ?";
+            $params[] = $realStatus;
+        } else {
+            $whereSql .= " AND o.Status = 'Trả hàng'";
+        }
+    } else {
+        $whereSql .= " AND o.Status = ?";
+        $params[] = $filter;
+    }
+}
+
+// --- BƯỚC A: ĐẾM TỔNG SỐ ĐƠN (Để tính số trang) ---
+// Chúng ta cần query riêng để đếm tổng số dòng thỏa mãn điều kiện lọc
+$countSql = "
+    SELECT COUNT(DISTINCT o.OrderID) 
+    FROM `Order` o
+    LEFT JOIN User_Account u ON o.UserID = u.UserID
+    LEFT JOIN Returns_Order ro ON o.OrderID = ro.OrderID
+    $whereSql
+";
+$stmtCount = $pdo->prepare($countSql);
+$stmtCount->execute($params);
+$totalOrders = $stmtCount->fetchColumn();
+$totalPages  = ceil($totalOrders / $limit);
+
+// --- BƯỚC B: LẤY DỮ LIỆU CHO TRANG HIỆN TẠI ---
 $sql = "
     SELECT 
         o.OrderID, o.UserID, o.TotalAmount, o.TotalAmountAfterVoucher, o.Status, 
@@ -136,38 +181,12 @@ $sql = "
     LEFT JOIN Returns_Order ro ON o.OrderID = ro.OrderID
     LEFT JOIN User_Voucher uv ON o.OrderID = uv.OrderID
     LEFT JOIN Voucher v ON uv.VoucherID = v.VoucherID
-    WHERE 1=1
+    $whereSql
+    ORDER BY o.CreatedDate DESC
+    LIMIT $limit OFFSET $offset
 ";
 
-// [MỚI] Xử lý lọc theo Mã Đơn Hàng
-if (!empty($searchId)) {
-    // Dùng LIKE để tìm gần đúng hoặc tìm chính xác. Ở đây dùng %...% để tìm linh hoạt
-    $sql .= " AND o.OrderID LIKE ?";
-    $params[] = "%$searchId%";
-}
-
-// Xử lý bộ lọc trạng thái
-if ($filter !== 'ALL') {
-    // Nếu chọn "Trả hàng" VÀ có chọn thêm trạng thái con
-    if ($filter === 'Trả hàng' && !empty($returnFilter)) {
-        // Lấy trạng thái thực từ mảng map
-        $realStatus = $returnStatuses[$returnFilter] ?? '';
-        if ($realStatus) {
-            $sql .= " AND ro.Status = ?";
-            $params[] = $realStatus;
-        } else {
-            // Trường hợp không khớp (phòng lỗi), chỉ lọc theo đơn trả hàng chung
-            $sql .= " AND o.Status = 'Trả hàng'";
-        }
-    } else {
-        // Lọc theo đơn hàng thường (hoặc Trả hàng chung chung)
-        $sql .= " AND o.Status = ?";
-        $params[] = $filter;
-    }
-}
-
-$sql .= " ORDER BY o.CreatedDate DESC";
-
+// Thực thi query chính
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -518,6 +537,43 @@ if (!empty($orderIds)) {
                     </div>
                 </div>
             <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+    <?php if (!empty($orders) && $totalPages > 1): ?>
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                
+                <?php
+                // Tạo query string để giữ lại các bộ lọc hiện tại (status, search_id, return_filter)
+                $queryParams = $_GET;
+                unset($queryParams['page']); // Xóa page hiện tại để thay bằng page mới
+                $queryString = http_build_query($queryParams);
+                ?>
+
+                <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="?<?php echo $queryString; ?>&page=<?php echo $page - 1; ?>" aria-label="Previous">
+                        <span aria-hidden="true">&laquo;</span>
+                    </a>
+                </li>
+
+                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                    <li class="page-item <?php echo ($i == $page) ? 'active' : ''; ?>">
+                        <a class="page-link" href="?<?php echo $queryString; ?>&page=<?php echo $i; ?>">
+                            <?php echo $i; ?>
+                        </a>
+                    </li>
+                <?php endfor; ?>
+
+                <li class="page-item <?php echo ($page >= $totalPages) ? 'disabled' : ''; ?>">
+                    <a class="page-link" href="?<?php echo $queryString; ?>&page=<?php echo $page + 1; ?>" aria-label="Next">
+                        <span aria-hidden="true">&raquo;</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+        
+        <div class="text-center text-muted small mt-2">
+            Hiển thị trang <?php echo $page; ?> / <?php echo $totalPages; ?> (Tổng <?php echo $totalOrders; ?> đơn hàng)
         </div>
     <?php endif; ?>
 </div>

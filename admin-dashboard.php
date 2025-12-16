@@ -133,6 +133,13 @@ function h($str)
     >
         Voucher
     </a>
+
+        <a
+        href="?tab=setting"
+        class="admin-tab-link <?php echo $tab === 'setting' ? 'admin-tab-link-active' : ''; ?>"
+    >
+        Cài đặt
+    </a>
     
 </nav>
 
@@ -426,6 +433,11 @@ function h($str)
         <!-- ================= MARKETING ================= -->
         <?php if ($tab === 'marketing'): ?>
             <?php include 'admin-voucher.php'; ?>
+        <?php endif; ?>
+
+        <!-- ================= SETTING ================= -->
+        <?php if ($tab === 'setting'): ?>
+            <?php include 'admin-setting.php'; ?>
         <?php endif; ?>
 
     </div>
