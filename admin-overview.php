@@ -39,10 +39,10 @@ $latestProducts = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $totalCustomers = (int)$pdo->query("
-    SELECT COUNT(*) FROM User_Account
+    SELECT COUNT(*) FROM User_Account where Role ='customer'
 ")->fetchColumn();
 ?>
-
+<h2 class="account-section-title">Overview</h2>
 <div class="row">
     <div class="col-md-3 mb-3">
         <div class="account-card">
