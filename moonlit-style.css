@@ -3441,3 +3441,100 @@ img {
         height: 200px;
     }
 }
+
+/* ================= ADMIN NAV ================= */
+
+
+.admin-nav {
+    border-bottom: 1px solid #e6d8c3;
+}
+
+
+.admin-nav-list {
+    display: flex;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+
+.admin-nav-list > li {
+    position: relative; /* 🔥 MỐC CHUẨN */
+}
+
+
+.admin-nav-list a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 22px;
+    border-radius: 999px;
+    color: #6b4f2c;
+    text-decoration: none;
+    font-size: 15px;
+    transition: all 0.2s ease;
+}
+
+
+.admin-nav-list a:hover {
+    background-color: #e8f0ff;
+    color: #1f4ed8;
+}
+
+
+.admin-nav-list a.active {
+    background-color: #ffffff;
+    color: #1f4ed8;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+}
+
+
+/* ================= DROPDOWN ADMIN  ================= */
+
+
+.admin-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;        
+    min-width: 180px;
+
+
+    background: #ffffff;
+    border-radius: 14px;
+    padding: 6px 0;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.12);
+    border: 1px solid #eee;
+
+
+    display: none;
+    z-index: 999;
+
+
+    list-style: none;
+    margin: 0;
+    padding: 6px 0;
+}
+
+
+.dropdown.show .admin-dropdown-menu {
+    display: block;
+}
+
+
+.admin-dropdown-menu a {
+    display: block;
+    padding: 10px 16px;
+    color: #6b4f2c;
+    border-radius: 1;
+}
+
+
+.admin-dropdown-menu a:hover {
+    background-color: #e8f0ff;
+    color: #1f4ed8;
+}
+.admin-dropdown-menu li {
+    list-style: none;
+}
