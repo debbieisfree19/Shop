@@ -80,6 +80,8 @@ img {
     position: sticky;
     top: 0;
     z-index: 1000;
+    flex-shrink: 0;
+    width: 100%;
 }
 
 .header-inner {
@@ -718,6 +720,9 @@ img {
     padding: 15px 0;
     margin-top: 20px;
     font-size: 14px;
+    flex-shrink: 0;
+    width: 100%;
+    z-index: 100;
 }
 
 /* =============================================================================
@@ -1060,18 +1065,10 @@ img {
     flex-direction: column; /* QUAN TRỌNG: Xếp dọc */
     min-height: 100vh;      /* Chiều cao tối thiểu bằng màn hình */
     margin: 0;
-    background: linear-gradient(135deg, #fdfbf7 0%, #E8DCC8 100%); /* Màu nền của bạn */
+    background: linear-gradient(135deg, var(--color-beige) 0%, #E8DCC8 100%); /* Màu nền của bạn */
 }
 
-/* 2. Header và Footer không được co lại (shrink) */
-.site-header, 
-.site-footer {
-    flex-shrink: 0;
-    width: 100%;
-    z-index: 100;
-}
-
-/* 3. Phần Main chứa Form: Tự động giãn ra để đẩy Footer xuống đáy */
+/* 2. Phần Main chứa Form: Tự động giãn ra để đẩy Footer xuống đáy */
 .auth-main {
     flex: 1 0 auto; /* Grow: 1 (giãn), Shrink: 0 (không co), Basis: auto */
     display: flex;
@@ -1088,10 +1085,10 @@ img {
 /* Thẻ card trắng chứa form */
 .auth-card {
     background-color: var(--color-white, #fff); /* Fallback màu trắng nếu biến lỗi */
-    border-radius: 24px;
-    padding: 32px 40px 26px;
-    box-shadow: 0 18px 40px rgba(30, 74, 140, 0.22);
-    border-left: 6px solid var(--color-deep-blue, #1e4a8c);
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: 0 4px 20px rgba(30, 74, 140, 0.1);
+    border-left: 5px solid var(--color-deep-blue);
     max-width: 520px;
     width: 100%;
     position: relative; /* Đề phòng các element con absolute */
@@ -1099,13 +1096,12 @@ img {
 
 /* Tiêu đề “Đăng Nhập” */
 .auth-title {
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 700;
-    color: var(--color-deep-blue, #1e4a8c);
+    color: var(--color-deep-blue);
+    margin-bottom: 30px;
     text-align: center;
-    margin-bottom: 24px;
 }
-
 /* Alert lỗi */
 .auth-alert {
     font-size: 13px;
@@ -1133,18 +1129,50 @@ img {
 .auth-label {
     font-size: 14px;
     font-weight: 500;
-    color: var(--color-muted-brown, #6c757d);
+    color: var(--color-muted-brown);
+    margin-bottom: 8px;
 }
 
 /* Input */
-.auth-input { width: 100%; }
+.auth-input {
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.auth-input:focus {
+    border-color: var(--color-bright-yellow);
+    box-shadow: 0 0 0 3px rgba(244, 211, 94, 0.1);
+    outline: none;
+}
 
 /* Nút Đăng Nhập */
 .auth-btn-submit {
-    width: 100%;
-    margin-top: 8px;
-    padding: 11px 18px;
-    font-size: 15px;
+    background-color: var(--color-deep-blue);
+    color: var(--color-white);
+    font-weight: 600;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+}
+
+.auth-btn-submit:hover {
+    background-color: #163A6F;
+    box-shadow: 0 4px 12px rgba(30, 74, 140, 0.3);
+    transform: translateY(-2px);
+    color: var(--color-white);
+}
+
+.auth-alert {
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    border: none;
 }
 
 /* Divider & Footer link */
@@ -1155,18 +1183,29 @@ img {
 }
 
 .auth-footer {
-    font-size: 13px;
     text-align: center;
-    color: var(--color-secondary, #6c757d);
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid var(--color-border);
 }
 
-.auth-footer .auth-link {
-    color: var(--color-deep-blue, #1e4a8c);
-    font-weight: 500;
+.auth-footer p {
+    font-size: 14px;
+    color: var(--color-muted-brown);
+}
+
+.auth-link {
+    color: var(--color-deep-blue);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.3s ease;
     text-decoration: underline;
     text-underline-offset: 3px;
 }
-.auth-footer .auth-link:hover { color: #163A6F; }
+
+.auth-link:hover {
+    color: #010d21;
+}
 
 /* Mobile Responsive */
 @media (max-width: 576px) {
@@ -1722,104 +1761,6 @@ img {
 /* phải: info */
 .account-card .product-detail-layout .product-detail-info{
   min-width: 0 !important;
-}
-
-/* =============================================================================
-   AUTHENTICATION PAGES (Login & Register)
-   ============================================================================= */
-
-.auth-body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, var(--color-beige) 0%, #E8DCC8 100%);
-}
-
-.auth-card {
-    background-color: var(--color-white);
-    border-radius: 12px;
-    padding: 40px;
-    box-shadow: 0 4px 20px rgba(30, 74, 140, 0.1);
-    border-left: 5px solid var(--color-deep-blue);
-}
-
-.auth-title {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--color-deep-blue);
-    margin-bottom: 30px;
-    text-align: center;
-}
-
-.auth-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--color-muted-brown);
-    margin-bottom: 8px;
-}
-
-.auth-input {
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-size: 14px;
-    transition: all 0.3s ease;
-}
-
-.auth-input:focus {
-    border-color: var(--color-bright-yellow);
-    box-shadow: 0 0 0 3px rgba(244, 211, 94, 0.1);
-    outline: none;
-}
-
-.auth-btn-submit {
-    background-color: var(--color-deep-blue);
-    color: var(--color-white);
-    font-weight: 600;
-    padding: 12px 20px;
-    border: none;
-    border-radius: 6px;
-    transition: all 0.3s ease;
-    margin-top: 10px;
-}
-
-.auth-btn-submit:hover {
-    background-color: #163A6F;
-    box-shadow: 0 4px 12px rgba(30, 74, 140, 0.3);
-    transform: translateY(-2px);
-    color: var(--color-white);
-}
-
-.auth-alert {
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin-bottom: 20px;
-    font-size: 14px;
-    border: none;
-}
-
-.auth-footer {
-    text-align: center;
-    margin-top: 25px;
-    padding-top: 20px;
-    border-top: 1px solid var(--color-border);
-}
-
-.auth-footer p {
-    font-size: 14px;
-    color: var(--color-muted-brown);
-}
-
-.auth-link {
-    color: var(--color-deep-blue);
-    text-decoration: none;
-    font-weight: 600;
-    transition: color 0.3s ease;
-}
-
-.auth-link:hover {
-    color: var(--color-bright-yellow);
 }
 
 /* =============================================================================

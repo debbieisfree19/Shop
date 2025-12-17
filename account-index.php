@@ -7,6 +7,17 @@
 session_start();
 require_once 'db_connect.php';
 
+// --- 1. BỔ SUNG CÁC BIẾN CẦN THIẾT CHO HEADER ---
+$isLoggedIn = isset($_SESSION['user_id']);
+$currentUsername = $_SESSION['username'] ?? '';
+$currentPage = 'account-index.php'; // Đặt tên trang hiện tại để Active menu nếu cần
+
+// --- 2. BỔ SUNG HÀM HỖ TRỢ CHO HEADER ---
+if (!function_exists('nav_active')) {
+    function nav_active($page, $current) {
+        return $page === $current ? 'nav-active' : '';
+    }
+}
 // Redirect to login if not authenticated
 if (!isset($_SESSION['user_id'])) {
     header('Location: index.html');
@@ -39,16 +50,54 @@ if ($user && $user['Role'] === 'Admin') {
     <link rel="stylesheet" type="text/css" href="moonlit-style.css">
 </head>
 <body class="account-body">
-    <!-- Header -->
-    <header class="account-header">
-        <div class="container-fluid">
-            <div class="row align-items-center h-100">
-                <div class="col-6">
-                    <h1 class="account-logo">Moonlit Store</h1>
-                </div>
-                <div class="col-6 text-end">
-                    <span class="account-username">Xin chào, <?php echo htmlspecialchars($user['Username']); ?></span>
-                </div>
+     <!-- ===================== HEADER ===================== -->
+    <header class="account-header site-header">
+        <div class="container header-inner">
+            <div class="header-left">
+                <a href="index.php" class="logo-link header-logo">
+                    <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+
+                </a>
+
+                <nav class="header-menu">
+                    <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
+                        Trang chủ
+                    </a>
+                    <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
+                        Cửa hàng
+                    </a>
+                    <a href="aboutus.php"
+                        class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
+                        Về chúng tôi
+                    </a>
+                    <a href="return-policy.php"
+                        class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
+                        Chính sách
+                    </a>
+                </nav>
+            </div>
+
+            <div class="header-right">
+                <form method="GET" action="shop.php" class="header-search-form">
+                    <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
+                    <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
+                </form>
+
+                <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
+
+                <?php if ($isLoggedIn): ?>
+                    <div class="header-account">
+                        <span class="account-username">
+                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                        </span>
+                        <div class="header-account-actions">
+                            <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                            <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                <?php endif; ?>
             </div>
         </div>
     </header>
@@ -96,6 +145,10 @@ if ($user && $user['Role'] === 'Admin') {
             </div>
         </div>
     </div>
+    
+    <footer class="site-footer">
+        © 2025 Moonlit — All rights reserved.
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>

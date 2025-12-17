@@ -179,7 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="alert alert-success auth-alert" role="alert">
                             <?php echo htmlspecialchars($success_message); ?>
                             <br>
-                            <a href="auth-login.php" class="mt-2 d-inline-block">Về trang đăng nhập →</a>
+                            <a href="auth-login.php" class="auth-link mt-2 d-inline-block">Về trang đăng nhập →</a>
                         </div>
                     <?php endif; ?>
 
@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
     </main>
-    
+
      <footer class="site-footer">
         © 2025 Moonlit — All rights reserved.
     </footer>
