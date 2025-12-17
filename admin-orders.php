@@ -273,7 +273,7 @@ if (!empty($orderIds)) {
             </select>
         </div>
 
-        <div class="col-md-3" id="subStatusContainer" style="display: none;">
+        <div class="col-md-3 account-orders-hidden" id="subStatusContainer">
             <select name="return_filter" class="form-select">
                 <option value="">-- Chọn tiến độ trả hàng --</option>
                 <?php 
@@ -388,9 +388,9 @@ if (!empty($orderIds)) {
                                     <div class="list-group list-group-flush mb-3">
                                         <?php foreach ($items as $it): ?>
                                             <div class="list-group-item bg-transparent px-0 py-2 d-flex">
-                                                <div style="width: 60px; height: 60px; flex-shrink: 0;" class="me-3 border rounded overflow-hidden d-flex align-items-center justify-content-center bg-white">
+                                                <div class="me-3 border rounded overflow-hidden d-flex align-items-center justify-content-center bg-white admin-orders-product-image-box">
                                                     <?php if (!empty($it['Image'])): ?>
-                                                        <img src="data:image/jpeg;base64,<?php echo base64_encode($it['Image']); ?>" alt="<?php echo h($it['ProductName']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                                        <img src="data:image/jpeg;base64,<?php echo base64_encode($it['Image']); ?>" alt="<?php echo h($it['ProductName']); ?>" class="admin-orders-product-image">
                                                     <?php else: ?>
                                                         <i class="fas fa-image text-muted"></i>
                                                     <?php endif; ?>
@@ -406,7 +406,7 @@ if (!empty($orderIds)) {
                                                         <?php 
                                                         if (!empty($it['DiscountedPrice']) && $it['DiscountedPrice'] < $it['UnitPrice']) {
                                                             echo '<strong class="text-danger">' . number_format($it['DiscountedPrice'], 0, ',', '.') . ' đ</strong>';
-                                                            echo ' <del class="text-muted ms-1" style="font-size: 0.9em;">' . number_format($it['UnitPrice'], 0, ',', '.') . ' đ</del>';
+                                                            echo ' <del class="text-muted ms-1 admin-orders-old-price">' . number_format($it['UnitPrice'], 0, ',', '.') . ' đ</del>';
                                                         } else {
                                                             echo number_format($it['UnitPrice'], 0, ',', '.') . ' đ';
                                                         }

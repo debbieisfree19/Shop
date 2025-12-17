@@ -145,7 +145,7 @@ if ($user && $user['Role'] === 'Admin') {
             </div>
         </div>
     </div>
-    
+
     <footer class="site-footer">
         © 2025 Moonlit — All rights reserved.
     </footer>

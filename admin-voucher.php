@@ -225,27 +225,7 @@ $rankMap = [
 <head>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <style>
-        .card-header { background-color: #f8f9fa; font-weight: bold; }
-        
-        /* CSS cho Badge Rank */
-        .rank-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; border: 1px solid #ccc; white-space: nowrap; }
-        .rank-Gold { background-color: #fff3cd; color: #856404; border-color: #ffeeba; }
-        .rank-Silver { background-color: #e2e3e5; color: #41464b; border-color: #d6d8db; }
-        .rank-Bronze { background-color: #f8d7da; color: #842029; border-color: #f5c2c7; }
-        .rank-Platinum { background-color: #cff4fc; color: #055160; border-color: #b6effb; }
-        .rank-None { background-color: #f8f9fa; color: #212529; }
-        
-        /* CSS Status Badge */
-        .badge-status { padding: 5px 10px; border-radius: 20px; font-size: 0.8em; font-weight: 600; }
-        .bg-active { background-color: #d1e7dd; color: #0f5132; }
-        .bg-inactive { background-color: #f8d7da; color: #842029; }
-
-        /* Pagination CSS */
-        .pagination { margin-bottom: 0; }
-        .page-link { color: #333; }
-        .page-item.active .page-link { background-color: #0d6efd; border-color: #0d6efd; color: white; }
-    </style>
+    <link rel="stylesheet" type="text/css" href="moonlit-style.css">
 </head>
 <body class="bg-light p-4">
 <div class="container-fluid">
@@ -377,29 +357,28 @@ $rankMap = [
                     <span><i class="fas fa-list"></i> Danh Sách Voucher</span>
                     
                     <form method="GET" class="d-flex gap-2">
-                        <input type="hidden" name="tab" value="marketing">
+                        <input type="hidden" name="tab" value="voucher">
 
-                        <select name="rank" class="form-select form-select-sm" style="width: 150px;">
+                        <select name="rank" class="form-select form-select-sm admin-voucher-filter-select">
                             <option value="">-- Tất cả hạng --</option>
                             <?php foreach ($rankMap as $key => $label): ?>
                                 <option value="<?= $key ?>" <?= $filter_rank === $key ? 'selected' : '' ?>><?= $label ?></option>
                             <?php endforeach; ?>
                         </select>
                         
-                        <select name="status" class="form-select form-select-sm" style="width: 150px;">
+                        <select name="status" class="form-select form-select-sm admin-voucher-filter-select">
                             <option value="">-- Trạng thái --</option>
                             <option value="1" <?= $filter_status === '1' ? 'selected' : '' ?>>Active</option>
                             <option value="0" <?= $filter_status === '0' ? 'selected' : '' ?>>Inactive</option>
                         </select>
                         
                         <button type="submit" class="btn btn-sm btn-secondary">Lọc</button>
-                        <a href="?tab=voucher" class="btn btn-sm btn-outline-secondary">Reset</a>
                     </form>
                 </div>
 
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover mb-0" style="font-size: 0.9rem;">
+                        <table class="table table-striped table-hover mb-0 admin-voucher-table">
                             <thead class="table-dark">
                                 <tr>
                                     <th>Mã</th>
@@ -423,7 +402,7 @@ $rankMap = [
                                             <td>
                                                 <strong class="text-primary"><?= h($v['Code']) ?></strong><br>
                                                 <small><?= h($v['VoucherName']) ?></small>
-                                                <div class="mt-1 small text-muted" style="font-size: 0.8em;">
+                                                <div class="mt-1 small text-muted admin-voucher-subinfo">
                                                     <?php if ($v['MinOrder'] > 0): ?>
                                                         <div>Đơn tối thiểu: <?= number_format($v['MinOrder'], 0, ',', '.') ?>đ</div>
                                                     <?php endif; ?>

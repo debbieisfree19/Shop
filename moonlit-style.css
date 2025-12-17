@@ -38,6 +38,7 @@ html, body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background-color: var(--color-beige);
     color: var(--color-muted-brown);
+    overflow-x: hidden !important;
 }
 
 a {
@@ -69,10 +70,15 @@ img {
 .account-header {
     background: linear-gradient(90deg, var(--color-deep-blue) 0%, #2A5BA8 100%);
     color: var(--color-white);
-    padding: 12px 0;
+    width: 100%;
+    padding: 20px 0;
     box-shadow: 0 4px 12px rgba(30, 74, 140, 0.2);
+    height: 80px;
     display: flex;
     align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 
 /* Sticky riêng cho site-header để không ảnh hưởng chỗ khác */
@@ -82,6 +88,7 @@ img {
     z-index: 1000;
     flex-shrink: 0;
     width: 100%;
+    max-width: 100%;
 }
 
 .header-inner {
@@ -758,6 +765,12 @@ img {
 
     .used-book-item {
         grid-template-columns: 140px minmax(0, 1fr);
+    }
+    .account-header, 
+    .site-header { 
+        position: relative !important; /* Đổi về trạng thái bình thường */
+        top: auto !important;          /* Xóa bỏ vị trí top */
+        height: auto;                  /* Chiều cao tự động theo nội dung */
     }
 }
 
@@ -1774,23 +1787,6 @@ img {
     background-color: var(--color-beige);
 }
 
-.account-header {
-    background: linear-gradient(90deg, var(--color-deep-blue) 0%, #2A5BA8 100%);
-    color: var(--color-white);
-    padding: 20px 0;
-    box-shadow: 0 4px 12px rgba(30, 74, 140, 0.2);
-    height: 80px;
-    display: flex;
-    align-items: center;
-}
-
-.account-logo {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--color-bright-yellow);
-    letter-spacing: 1px;
-}
-
 .account-username {
     font-size: 14px;
     color: var(--color-text-light);
@@ -1812,7 +1808,9 @@ img {
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(30, 74, 140, 0.1);
     position: sticky;
-    top: 30px;
+    top: 100px;
+    z-index: 900;             /* Thấp hơn Header (1000) nhưng cao hơn nội dung */    /* Chỉ lấy chiều cao vừa đủ nội dung */
+    align-self: start;
 }
 
 .account-menu-item {
@@ -2028,10 +2026,45 @@ img {
     transition: all 0.2s ease-in-out;
 }
 
+.account-orders-pagination {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.account-orders-return-alert {
+    font-size: 13px;
+}
+
+.account-orders-return-item {
+    margin-bottom: 20px;
+}
+
+.account-orders-return-product-name {
+    font-weight: 600;
+}
+
 .account-orders-list {
     display: flex;
     flex-direction: column;
     gap: 20px;
+}
+
+.account-orders-return-sku {
+    font-size: 12px;
+    color: #666;
+}
+
+.account-orders-return-details {
+    margin-top: 10px;
+    padding-left: 1.5rem;
+}
+
+.account-orders-hidden {
+    display: none;
+}
+
+.account-orders-return-items-info {
+    margin-top: 20px;
 }
 
 .account-order-card {
@@ -2354,41 +2387,86 @@ img {
 
     /* CSS CHO MODAL (POPUP) HỦY ĐƠN */
 .modal-overlay {
-        position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5);
-        display: none;
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
 }
-    .modal-overlay .modal-content {
-        background: white;
-        padding: 25px;
-        border-radius: 8px;
-        width: 90%;
-        max-width: 500px;
-        position: relative;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    }
-    .modal-overlay .modal-header {
-        margin-bottom: 20px;
-        border-bottom: 1px solid #eee;
-        padding-bottom: 10px;
-    }
-    .modal-overlay .modal-title { font-size: 1.2rem; font-weight: bold; }
+.modal-overlay .modal-content {
+    background: white;
+    padding: 25px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+    
+.modal-overlay .modal-header {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+    
+.modal-overlay .modal-title { 
+    font-size: 1.2rem; 
+    font-weight: bold; 
+}
 
-    .modal-overlay .close-modal {
-        position: absolute; top: 15px; right: 20px;
-        cursor: pointer; font-size: 1.5rem; color: #aaa;
-    }
-.reason-list { list-style: none; padding: 0; margin: 0 0 20px 0; }
-.reason-item { margin-bottom: 12px; display: flex; align-items: center; }
-.reason-item input[type="radio"] { margin-right: 10px; transform: scale(1.2); cursor: pointer; }
-.reason-item label { cursor: pointer; font-size: 0.95rem; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.btn-secondary { background: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
-.btn-danger-confirm { background: #dc3545; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+.modal-overlay .close-modal {
+    position: absolute; top: 15px; right: 20px;
+    cursor: pointer; font-size: 1.5rem; color: #aaa;
+}
+
+.reason-list { 
+    list-style: none; 
+    padding: 0; 
+    margin: 0 0 20px 0; 
+}
+
+.reason-item { 
+    margin-bottom: 12px; 
+    display: flex; 
+    align-items: center; 
+}
+
+.reason-item input[type="radio"] { 
+    margin-right: 10px; 
+    transform: scale(1.2); 
+    cursor: pointer; 
+}
+
+.reason-item label { 
+    cursor: pointer; 
+    font-size: 0.95rem; 
+}
+
+.modal-actions { 
+    display: flex; 
+    justify-content: flex-end; 
+    gap: 10px; 
+}
+
+.btn-secondary { 
+    background: #6c757d; 
+    color: white; 
+    border: none; 
+    padding: 8px 15px; 
+    border-radius: 4px; 
+    cursor: pointer; 
+}
+
+.btn-danger-confirm { 
+    background: #dc3545; 
+    color: white; 
+    border: none; 
+    padding: 8px 15px; 
+    border-radius: 4px; 
+    cursor: pointer; 
+}
 
 /* =============================================================================
    VOUCHER & POINT EXCHANGE
@@ -3486,4 +3564,108 @@ img {
 }
 .admin-dropdown-menu li {
     list-style: none;
+}
+
+/* ================= ADMIN ORDER ================= */
+.admin-orders-product-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.admin-orders-product-image-box {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+}
+
+.admin-orders-old-price {
+    font-size: 0.9em;
+}
+
+/* ================= ADMIN VOUCHER ================= */
+.card-header { background-color: #f8f9fa; font-weight: bold; }
+        
+        /* CSS cho Badge Rank */
+.rank-badge { 
+    padding: 4px 8px; 
+    border-radius: 4px; 
+    font-size: 0.8em; 
+    font-weight: 600; 
+    border: 1px solid #ccc; 
+    white-space: nowrap; 
+}
+
+.rank-Gold { 
+    background-color: #fff3cd; 
+    color: #856404; 
+    border-color: #ffeeba; 
+}
+
+.rank-Silver { 
+    background-color: #e2e3e5; 
+    color: #41464b; 
+    border-color: #d6d8db; 
+}
+
+.rank-Bronze { 
+    background-color: #f8d7da; 
+    color: #842029; 
+    border-color: #f5c2c7; 
+}
+
+.rank-Platinum { 
+    background-color: #cff4fc; 
+    color: #055160; 
+    border-color: #b6effb; 
+}
+
+.rank-None { 
+    background-color: #f8f9fa; 
+    color: #212529; 
+}
+       
+        /* CSS Status Badge */
+.badge-status { 
+    padding: 5px 10px; 
+    border-radius: 20px; 
+    font-size: 0.8em; 
+    font-weight: 600; 
+}
+
+.bg-active { 
+    background-color: #d1e7dd; 
+    color: #0f5132; 
+}
+
+.bg-inactive { 
+    background-color: #f8d7da; 
+    color: #842029; 
+}
+
+        /* Pagination CSS */
+.pagination { 
+    margin-bottom: 0; 
+}
+
+.page-link { 
+    color: #333; 
+}
+
+.page-item.active .page-link { 
+    background-color: #0d6efd; 
+    border-color: #0d6efd; 
+    color: white; 
+}
+
+.admin-voucher-filter-select {
+    width: 150px;
+}
+
+.admin-voucher-table {
+    font-size: 0.9rem;
+}
+
+.admin-voucher-subinfo {
+    font-size: 0.8em;
 }

@@ -269,126 +269,131 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 }
 
 // ============================================================================
-// GET ORDERS DATA
+// GET ORDERS DATA (Đã thêm Phân Trang)
 // ============================================================================
-$filter = isset($_GET['status']) ? $_GET['status'] : 'all';
-$sql = "
-    SELECT
-        o.OrderID,
-        o.TotalAmount,
-        o.TotalAmountAfterVoucher,
-        o.Status,
-        o.PaymentMethod,
-        o.ShippingCity,
-        o.ShippingDistrict,
-        o.ShippingWard,
-        o.ShippingStreet,
-        o.ShippingNumber,
-        o.CreatedDate,
-        o.DateReceived,
-        oi.OrderItemID,
-        oi.Quantity,
-        oi.UnitPrice,
-        p.ProductName,
-        p.Image,
-        s.Format,
-        s.ISBN,
-        c.CarrierName,
-        c.ShippingPrice,
-        oi.DiscountedPrice,
-        v.DiscountValue, 
-        v.DiscountType  
-    FROM `Order` o
-    LEFT JOIN Order_Items oi ON o.OrderID = oi.OrderID
-    LEFT JOIN SKU s ON oi.SKU_ID = s.SKUID
-    LEFT JOIN Product p ON s.ProductID = p.ProductID
-    LEFT JOIN Shipping_Order so ON o.OrderID = so.OrderID
-    LEFT JOIN Carrier c ON so.CarrierID = c.CarrierID
-    LEFT JOIN User_Voucher uv ON o.OrderID = uv.OrderID
-    LEFT JOIN Voucher v ON uv.VoucherID = v.VoucherID
-    WHERE o.UserID = ?
-";
 
-$params = [$user_id];
+// [PHÂN TRANG 1] Cấu hình
+$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$limit = 2; // Số đơn hàng muốn hiện mỗi trang
+$offset = ($page - 1) * $limit;
+
+// [PHÂN TRANG 2] Xây dựng điều kiện lọc (WHERE clause)
+$filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+$where_conditions = ["o.UserID = ?"];
+$params_filter = [$user_id]; 
 
 switch ($filter) {
     case 'received':
-        $sql .= " AND o.Status = 'Đã nhận'";
+        $where_conditions[] = "o.Status = 'Đã nhận'";
         break;
     case 'returned':
-        $sql .= " AND (o.Status = 'Trả hàng')";
+        $where_conditions[] = "o.Status = 'Trả hàng'";
         break;
     case 'refunded': 
-        $sql .= " AND o.Status = 'Đã hoàn tiền'";
+        $where_conditions[] = "o.Status = 'Đã hoàn tiền'";
         break;
     case 'cancelled':
-        $sql .= " AND o.Status = 'Bị hủy'";
+        $where_conditions[] = "o.Status = 'Bị hủy'";
         break;
     default:
-        $sql .= " AND o.Status IN ('Đã nhận', 'Bị hủy', 'Trả hàng', 'Đã hoàn tiền')";
+        $where_conditions[] = "o.Status IN ('Đã nhận', 'Bị hủy', 'Trả hàng', 'Đã hoàn tiền')";
         break;
 }
+$where_sql = implode(' AND ', $where_conditions);
 
-$sql .= " ORDER BY o.CreatedDate DESC";
+// [PHÂN TRANG 3] Đếm tổng số đơn hàng để chia trang
+$sql_count = "SELECT COUNT(DISTINCT o.OrderID) FROM `Order` o WHERE $where_sql";
+$stmt = $pdo->prepare($sql_count);
+$stmt->execute($params_filter);
+$total_orders = $stmt->fetchColumn();
+$total_pages = ceil($total_orders / $limit);
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$orders = $stmt->fetchAll();
+// [PHÂN TRANG 4] Lấy danh sách OrderID thuộc trang hiện tại
+// Lý do: Phải lấy ID trước rồi mới JOIN để tránh lỗi mất sản phẩm khi dùng LIMIT
+$sql_ids = "SELECT o.OrderID FROM `Order` o WHERE $where_sql ORDER BY o.CreatedDate DESC, o.OrderID DESC LIMIT $limit OFFSET $offset";
+$stmt = $pdo->prepare($sql_ids);
+$stmt->execute($params_filter);
+$page_order_ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-// Group orders by OrderID
+// [PHÂN TRANG 5] Truy vấn chi tiết (Giữ nguyên cấu trúc SELECT/JOIN cũ của bạn)
 $grouped_orders = [];
-foreach ($orders as $order) {
-    $order_id = $order['OrderID'];
-    if (!isset($grouped_orders[$order_id])) {
 
-        $address_parts = array_filter([
-            $order['ShippingNumber'] ?? '', 
-            $order['ShippingStreet'] ?? '', 
-            $order['ShippingWard'] ?? '', 
-            $order['ShippingDistrict'] ?? '', 
-            $order['ShippingCity'] ?? ''
-        ], function($value) {
-            return !empty(trim($value));
-        });
-        $full_shipping_address = implode(', ', $address_parts);
-        
-        $grouped_orders[$order_id] = [
-            'OrderID' => $order['OrderID'],
-            'TotalAmount' => $order['TotalAmount'],
-            'TotalAmountAfterVoucher' => $order['TotalAmountAfterVoucher'],
-            'Status' => $order['Status'],
-            'PaymentMethod' => $order['PaymentMethod'],
-            'ShippingAddress' => $full_shipping_address,
-            'CreatedDate' => $order['CreatedDate'],
-            'DateReceived' => $order['DateReceived'],
-            'CarrierName' => $order['CarrierName'], 
-            'ShippingPrice' => $order['ShippingPrice'],
-            'VoucherValue' => $order['DiscountValue'], 
-            'VoucherType' => $order['DiscountType'],
-            'Items' => []
-        ];
-    }
-    if (!empty($order['ProductName'])) {
-        $grouped_orders[$order_id]['Items'][] = [
-            'OrderItemID' => $order['OrderItemID'],
-            'ProductName' => $order['ProductName'],
-            'Image' => $order['Image'],
-            'Format' => $order['Format'],
-            'ISBN' => $order['ISBN'],
-            'Quantity' => $order['Quantity'],
-            'UnitPrice' => $order['UnitPrice'],
-            'DiscountedPrice' => $order['DiscountedPrice']
-        ];
+if (!empty($page_order_ids)) {
+    // Tạo chuỗi placeholder (?,?,?) tương ứng số lượng ID lấy được
+    $placeholders = implode(',', array_fill(0, count($page_order_ids), '?'));
+
+    $sql = "
+        SELECT
+            o.OrderID, o.TotalAmount, o.TotalAmountAfterVoucher, o.Status, o.PaymentMethod,
+            o.ShippingCity, o.ShippingDistrict, o.ShippingWard, o.ShippingStreet, o.ShippingNumber,
+            o.CreatedDate, o.DateReceived,
+            oi.OrderItemID, oi.Quantity, oi.UnitPrice, oi.DiscountedPrice,
+            p.ProductName, p.Image, s.Format, s.ISBN,
+            c.CarrierName, c.ShippingPrice,
+            v.DiscountValue, v.DiscountType  
+        FROM `Order` o
+        LEFT JOIN Order_Items oi ON o.OrderID = oi.OrderID
+        LEFT JOIN SKU s ON oi.SKU_ID = s.SKUID
+        LEFT JOIN Product p ON s.ProductID = p.ProductID
+        LEFT JOIN Shipping_Order so ON o.OrderID = so.OrderID
+        LEFT JOIN Carrier c ON so.CarrierID = c.CarrierID
+        LEFT JOIN User_Voucher uv ON o.OrderID = uv.OrderID
+        LEFT JOIN Voucher v ON uv.VoucherID = v.VoucherID
+        WHERE o.OrderID IN ($placeholders)
+        ORDER BY o.CreatedDate DESC
+    ";
+
+    // Truyền danh sách ID vào câu query chính
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($page_order_ids);
+    $orders = $stmt->fetchAll();
+
+    // Group logic cũ của bạn giữ nguyên 100%
+    foreach ($orders as $order) {
+        $order_id = $order['OrderID'];
+        if (!isset($grouped_orders[$order_id])) {
+            $address_parts = array_filter([
+                $order['ShippingNumber'] ?? '', $order['ShippingStreet'] ?? '', 
+                $order['ShippingWard'] ?? '', $order['ShippingDistrict'] ?? '', $order['ShippingCity'] ?? ''
+            ], function($value) { return !empty(trim($value)); });
+            
+            $grouped_orders[$order_id] = [
+                'OrderID' => $order['OrderID'],
+                'TotalAmount' => $order['TotalAmount'],
+                'TotalAmountAfterVoucher' => $order['TotalAmountAfterVoucher'],
+                'Status' => $order['Status'],
+                'PaymentMethod' => $order['PaymentMethod'],
+                'ShippingAddress' => implode(', ', $address_parts),
+                'CreatedDate' => $order['CreatedDate'],
+                'DateReceived' => $order['DateReceived'],
+                'CarrierName' => $order['CarrierName'], 
+                'ShippingPrice' => $order['ShippingPrice'],
+                'VoucherValue' => $order['DiscountValue'], 
+                'VoucherType' => $order['DiscountType'],
+                'Items' => []
+            ];
+        }
+        if (!empty($order['ProductName'])) {
+            $grouped_orders[$order_id]['Items'][] = [
+                'OrderItemID' => $order['OrderItemID'],
+                'ProductName' => $order['ProductName'],
+                'Image' => $order['Image'],
+                'Format' => $order['Format'],
+                'ISBN' => $order['ISBN'],
+                'Quantity' => $order['Quantity'],
+                'UnitPrice' => $order['UnitPrice'],
+                'DiscountedPrice' => $order['DiscountedPrice']
+            ];
+        }
     }
 }
 
-// Get Return Statuses
+// Logic lấy trạng thái trả hàng (Tối ưu lại bằng cách dùng $page_order_ids)
 $return_map = [];
-if (!empty($grouped_orders)) {
-    $order_ids = array_keys($grouped_orders);
-    $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
+if (!empty($page_order_ids)) {
+    $placeholders = implode(',', array_fill(0, count($page_order_ids), '?'));
     $stmt = $pdo->prepare("SELECT ReturnID, OrderID, Status FROM Returns_Order WHERE OrderID IN ($placeholders)");
-    $stmt->execute($order_ids);
+    $stmt->execute($page_order_ids);
     $returns = $stmt->fetchAll();
 
     foreach ($returns as $return) {
@@ -404,7 +409,7 @@ if (!empty($grouped_orders)) {
             <form method="GET" action="">
                 <?php
                 foreach ($_GET as $key => $value) {
-                    if ($key !== 'status') {
+                    if ($key !== 'status'&& $key !== 'page') {
                         echo '<input type="hidden" name="' . htmlspecialchars($key) . '" value="' . htmlspecialchars($value) . '">';
                     }
                 }
@@ -619,6 +624,49 @@ if (!empty($grouped_orders)) {
                 </div>
             <?php endforeach; ?>
         </div>
+        <?php if ($total_pages > 1): ?>
+        <div class="account-pagination-wrapper account-orders-pagination">
+            <nav>
+                <ul class="pagination justify-content-center">
+                    <?php 
+                    // [FIX LỖI CHUYỂN TRANG] 
+                    // 1. Lấy toàn bộ tham số hiện tại trên URL (ví dụ: act=history, type=user...)
+                    $params = $_GET;
+                    
+                    // 2. Xóa tham số 'page' cũ đi (để tránh bị trùng lặp khi nối chuỗi)
+                    unset($params['page']);
+
+                    // 3. Đảm bảo tham số status luôn đúng với biến $filter hiện tại
+                    $params['status'] = $filter;
+
+                    // 4. Tạo lại chuỗi query chuẩn (Ví dụ: ?act=history&status=all&page=)
+                    // http_build_query sẽ tự động nối các tham số lại với nhau
+                    $url_param = "?" . http_build_query($params) . "&page=";
+                    ?>
+
+                    <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
+                        <a class="page-link" href="<?php echo $url_param . ($page - 1); ?>" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+
+                    <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                        <li class="page-item <?php echo ($i == $page) ? 'active' : ''; ?>">
+                            <a class="page-link" href="<?php echo $url_param . $i; ?>">
+                                <?php echo $i; ?>
+                            </a>
+                        </li>
+                    <?php endfor; ?>
+
+                    <li class="page-item <?php echo ($page >= $total_pages) ? 'disabled' : ''; ?>">
+                        <a class="page-link" href="<?php echo $url_param . ($page + 1); ?>" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 
@@ -634,7 +682,7 @@ if (!empty($grouped_orders)) {
                     <input type="hidden" name="action" value="request_return">
                     <input type="hidden" name="order_id" id="return_order_id">
                     
-                    <div class="alert alert-info" style="font-size: 13px;">
+                    <div class="alert alert-info account-orders-return-alert">
                         <i class="fas fa-info-circle"></i> Vui lòng chọn sản phẩm, lý do và tải ảnh minh chứng để được hỗ trợ nhanh nhất.
                     </div>
 
@@ -659,19 +707,19 @@ if (!empty($grouped_orders)) {
             <div class="modal-body">
                 <div class="account-tracking-timeline" id="return_timeline_container"></div>
 
-                <div id="return_success_message" style="display:none;" class="account-return-success">
+                <div id="return_success_message"class="account-return-success account-orders-hidden">
                     <i class="fas fa-check-circle"></i>
                     <h4>Đã hoàn tất trả hàng</h4>
                     <p id="return_refund_text"></p>
                 </div>
 
-                <div id="return_items_info_container" style="margin-top: 20px;"></div>
+                <div id="return_items_info_container" class="account-orders-return-items-info"></div>
             </div>
             <div class="modal-footer account-modal-footer">
                 <form method="POST" id="cancelReturnForm">
                     <input type="hidden" name="action" value="cancel_return">
                     <input type="hidden" name="return_id" id="cancel_return_id_input">
-                    <button type="submit" id="cancel_return_btn" class="btn btn-danger" style="display:none;" onclick="return confirm('Bạn chắc chắn muốn hủy yêu cầu này? Mọi dữ liệu trả hàng sẽ bị xóa.');">Hoàn tác</button>
+                    <button type="submit" id="cancel_return_btn" class="btn btn-danger account-orders-hidden " onclick="return confirm('Bạn chắc chắn muốn hủy yêu cầu này? Mọi dữ liệu trả hàng sẽ bị xóa.');">Hoàn tác</button>
                 </form>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
             </div>
@@ -704,20 +752,20 @@ function setReturnOrderData(orderId, orderCard) {
         if (skuEl) skuText = skuEl.innerText;
 
         html += `
-        <div class="account-return-item-section" style="margin-bottom: 20px;">
+        <div class="account-return-item-section account-orders-return-item">
             <div class="account-return-item-header">
                 <div class="form-check">
                     <input class="form-check-input return-item-check" type="checkbox" 
                            name="return_items[]" value="${itemId}" 
                            onchange="toggleItemReturn(this, '${itemId}')">
-                    <label class="form-check-label" style="font-weight:600;">
+                    <label class="form-check-label account-orders-return-product-name">
                         ${name}
                     </label>
-                    <div style="font-size:12px; color:#666;">${skuText}</div>
+                    <div class="account-orders-return-sku">${skuText}</div>
                 </div>
             </div>
 
-            <div id="return_detail_${itemId}" class="account-return-item-details" style="display:none; margin-top:10px; padding-left: 1.5rem;">
+            <div id="return_detail_${itemId}" class="account-return-item-details account-orders-return-details account-orders-hidden">
                 
                 <div class="form-group mb-2">
                     <label class="form-label">Số lượng trả (Max: ${maxQty}) <span class="text-danger">*</span></label>
