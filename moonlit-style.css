@@ -1054,31 +1054,54 @@ img {
    AUTH PAGES (LOGIN / REGISTER)
    ============================================================================= */
 
-/* Main bao hết phần login, để canh giữa theo chiều dọc + ngang */
-.auth-main {
-    flex: 1;
+/* 1. Thiết lập Body thành cột dọc (Column) để Header - Main - Footer xếp chồng lên nhau */
+.auth-body {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 16px;
+    flex-direction: column; /* QUAN TRỌNG: Xếp dọc */
+    min-height: 100vh;      /* Chiều cao tối thiểu bằng màn hình */
+    margin: 0;
+    background: linear-gradient(135deg, #fdfbf7 0%, #E8DCC8 100%); /* Màu nền của bạn */
 }
+
+/* 2. Header và Footer không được co lại (shrink) */
+.site-header, 
+.site-footer {
+    flex-shrink: 0;
+    width: 100%;
+    z-index: 100;
+}
+
+/* 3. Phần Main chứa Form: Tự động giãn ra để đẩy Footer xuống đáy */
+.auth-main {
+    flex: 1 0 auto; /* Grow: 1 (giãn), Shrink: 0 (không co), Basis: auto */
+    display: flex;
+    align-items: center;     /* Căn giữa dọc */
+    justify-content: center; /* Căn giữa ngang */
+    padding: 40px 16px;
+    width: 100%;
+}
+
+/* =============================================================================
+   GIỮ NGUYÊN PHẦN GIAO DIỆN CARD & FORM CỦA BẠN
+   ============================================================================= */
 
 /* Thẻ card trắng chứa form */
 .auth-card {
-    background-color: var(--color-white);
+    background-color: var(--color-white, #fff); /* Fallback màu trắng nếu biến lỗi */
     border-radius: 24px;
     padding: 32px 40px 26px;
     box-shadow: 0 18px 40px rgba(30, 74, 140, 0.22);
-    border-left: 6px solid var(--color-deep-blue);
+    border-left: 6px solid var(--color-deep-blue, #1e4a8c);
     max-width: 520px;
     width: 100%;
+    position: relative; /* Đề phòng các element con absolute */
 }
 
 /* Tiêu đề “Đăng Nhập” */
 .auth-title {
     font-size: 26px;
     font-weight: 700;
-    color: var(--color-deep-blue);
+    color: var(--color-deep-blue, #1e4a8c);
     text-align: center;
     margin-bottom: 24px;
 }
@@ -1093,15 +1116,12 @@ img {
 
 .auth-alert-error {
     background-color: rgba(220, 53, 69, 0.06);
-    border-left: 3px solid var(--color-danger);
-    color: var(--color-danger);
+    border-left: 3px solid var(--color-danger, #dc3545);
+    color: var(--color-danger, #dc3545);
 }
 
 /* Form + group */
-.auth-form {
-    width: 100%;
-}
-
+.auth-form { width: 100%; }
 .auth-form-group {
     display: flex;
     flex-direction: column;
@@ -1113,15 +1133,13 @@ img {
 .auth-label {
     font-size: 14px;
     font-weight: 500;
-    color: var(--color-muted-brown);
+    color: var(--color-muted-brown, #6c757d);
 }
 
-/* Input – dùng chung với .account-input */
-.auth-input {
-    width: 100%;
-}
+/* Input */
+.auth-input { width: 100%; }
 
-/* Nút Đăng Nhập – kết hợp với .account-btn-save */
+/* Nút Đăng Nhập */
 .auth-btn-submit {
     width: 100%;
     margin-top: 8px;
@@ -1129,45 +1147,35 @@ img {
     font-size: 15px;
 }
 
-/* Đường kẻ mỏng phía trên “Bạn chưa có tài khoản?” */
+/* Divider & Footer link */
 .auth-divider {
     height: 1px;
     background-color: #eee;
     margin: 22px 0 12px;
 }
 
-/* Chữ nhỏ bên dưới */
 .auth-footer {
     font-size: 13px;
     text-align: center;
-    color: var(--color-secondary);
+    color: var(--color-secondary, #6c757d);
 }
 
 .auth-footer .auth-link {
-    color: var(--color-deep-blue);
+    color: var(--color-deep-blue, #1e4a8c);
     font-weight: 500;
     text-decoration: underline;
     text-underline-offset: 3px;
 }
+.auth-footer .auth-link:hover { color: #163A6F; }
 
-.auth-footer .auth-link:hover {
-    color: #163A6F;
-}
-
-/* Mobile */
+/* Mobile Responsive */
 @media (max-width: 576px) {
-    .auth-main {
-        padding: 24px 12px 30px;
-    }
-
+    .auth-main { padding: 24px 12px 30px; }
     .auth-card {
         padding: 24px 18px 20px;
         border-radius: 18px;
     }
-
-    .auth-title {
-        font-size: 22px;
-    }
+    .auth-title { font-size: 22px; }
 }
 
 /* =============================================================================
