@@ -47,64 +47,87 @@ try {
 }
 
 
-// Sách mới nhất
+
+// Sách mới nhất (4 cuốn, có xét SALE)
 $latestProducts = [];
 try {
     $stmt = $pdo->query("
         SELECT
-            ProductID,
-            ProductName,
-            Description,
-            Price,
-            DiscountPrice,
-            (Image IS NOT NULL AND OCTET_LENGTH(Image) > 0) AS HasImage
-        FROM Product
-        ORDER BY CreatedDate DESC
+            p.ProductID,
+            p.ProductName,
+            p.Description,
+            p.CreatedDate,
+
+            MIN(
+                CASE 
+                    WHEN ps.DiscountedPrice IS NOT NULL 
+                    THEN ps.DiscountedPrice 
+                    ELSE s.SellPrice 
+                END
+            ) AS MinDisplayPrice,
+
+            MAX(s.SellPrice) AS MaxOriginalPrice,
+
+            MAX(ps.DiscountedPrice IS NOT NULL) AS HasSale,
+
+            (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
+        FROM Product p
+        JOIN SKU s 
+            ON s.ProductID = p.ProductID
+        LEFT JOIN PRODUCT_SALE ps
+            ON ps.SKUID = s.SKUID
+            AND ps.StartDate <= NOW()
+            AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+        WHERE
+            p.Status = 1
+            AND s.Status = 1
+        GROUP BY
+            p.ProductID,
+            p.ProductName,
+            p.Description,
+            p.CreatedDate,
+            p.Image
+        ORDER BY p.CreatedDate DESC
         LIMIT 4
     ");
     $latestProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
 }
 
-// Đang khuyến mãi
+
+
+// Đang khuyến mãi (4 cuốn mới nhất có sale còn hiệu lực)
 $saleProducts = [];
 try {
     $stmt = $pdo->query("
         SELECT
-            ProductID,
-            ProductName,
-            Description,
-            Price,
-            DiscountPrice,
-            (Image IS NOT NULL AND OCTET_LENGTH(Image) > 0) AS HasImage
-        FROM Product
-        WHERE DiscountPrice IS NOT NULL
-        ORDER BY (Price - DiscountPrice) DESC, CreatedDate DESC
+            p.ProductID,
+            p.ProductName,
+            p.Description,
+            p.Price,
+            ps.DiscountedPrice,
+            p.CreatedDate,
+            (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
+        FROM PRODUCT_SALE ps
+        JOIN SKU s
+            ON s.SKUID = ps.SKUID
+        JOIN Product p
+            ON p.ProductID = s.ProductID
+        WHERE
+            p.Status = 1
+            AND s.Status = 1
+            AND ps.StartDate <= NOW()
+            AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+        ORDER BY p.CreatedDate DESC
         LIMIT 4
     ");
     $saleProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
 }
 
-// Bài đăng review sách
-$reviewPosts = [];
-try {
-    $stmt = $pdo->query("
-        SELECT
-            PostID,
-            Title,
-            Excerpt,
-            ThumbnailUrl,
-            CreatedAt,
-            AuthorName
-        FROM Book_Post
-        WHERE Status = 'published'
-        ORDER BY CreatedAt DESC
-        LIMIT 3
-    ");
-    $reviewPosts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
-}
+
+
+
 
 ?>
 <!DOCTYPE html>
@@ -197,7 +220,7 @@ try {
                             </p>
 
                             <div class="intro-actions">
-                                
+
                                 <a href="aboutus.php" class="btn btn-outline-secondary">
                                     Về Moonlit
                                 </a>
@@ -296,13 +319,32 @@ try {
                                         </p>
 
                                         <div class="product-price-row">
-                                            <?php if (!empty($p['DiscountPrice'])): ?>
-                                                <span class="product-price"><?php echo format_price($p['DiscountPrice']); ?></span>
-                                                <span class="product-old-price"><?php echo format_price($p['Price']); ?></span>
+                                            <?php if ($p['HasSale']): ?>
+                                                <span class="product-price text-danger">
+                                                    <?php echo format_price($p['MinDisplayPrice']); ?>
+                                                </span>
+
+                                                <span class="product-old-price">
+                                                    <?php echo format_price($p['MaxOriginalPrice']); ?>
+                                                </span>
+
+                                                <span class="product-badge-sale">Sale</span>
+
                                             <?php else: ?>
-                                                <span class="product-price"><?php echo format_price($p['Price']); ?></span>
+                                                <?php if ($p['MinDisplayPrice'] == $p['MaxOriginalPrice']): ?>
+                                                    <span class="product-price">
+                                                        <?php echo format_price($p['MinDisplayPrice']); ?>
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="product-price">
+                                                        <?php echo format_price($p['MinDisplayPrice']); ?>
+                                                        -
+                                                        <?php echo format_price($p['MaxOriginalPrice']); ?>
+                                                    </span>
+                                                <?php endif; ?>
                                             <?php endif; ?>
                                         </div>
+
                                     </div>
                                 </a>
 
@@ -332,7 +374,7 @@ try {
                 <div class="home-grid-4">
                     <?php if (!empty($saleProducts)): ?>
                         <?php foreach ($saleProducts as $p): ?>
-                            <article class="product-card product-card-sale">
+                            <article class="shop-product-card product-card-sale">
                                 <a href="product-detail.php?id=<?php echo $p['ProductID']; ?>" class="product-card-link">
                                     <div class="product-card-image">
                                         <?php if (!empty($p['HasImage'])): ?>
@@ -348,7 +390,8 @@ try {
                                         <h3 class="product-title"><?php echo htmlspecialchars($p['ProductName']); ?></h3>
 
                                         <div class="product-price-row">
-                                            <span class="product-price"><?php echo format_price($p['DiscountPrice']); ?></span>
+                                            <span
+                                                class="product-price"><?php echo format_price($p['DiscountedPrice']); ?></span>
                                             <span class="product-old-price"><?php echo format_price($p['Price']); ?></span>
                                         </div>
 
@@ -366,52 +409,7 @@ try {
             </div>
         </section>
 
-        <!-- ===== BÀI ĐĂNG REVIEW SÁCH ===== -->
-        <section class="home-section">
-            <div class="container">
-                <div class="home-section-header">
-                    <h2 class="home-section-title">Bài review sách mới</h2>
-                    <a href="blog.php" class="home-section-link">Xem thêm bài viết</a>
-                </div>
 
-                <div class="home-grid-3">
-                    <?php if (!empty($reviewPosts)): ?>
-                        <?php foreach ($reviewPosts as $post): ?>
-                            <article class="review-card">
-                                <a href="post-detail.php?id=<?php echo urlencode($post['PostID']); ?>" class="review-card-link">
-                                    <div class="review-card-image">
-                                        <?php if (!empty($post['ThumbnailUrl'])): ?>
-                                            <img src="<?php echo htmlspecialchars($post['ThumbnailUrl']); ?>"
-                                                alt="<?php echo htmlspecialchars($post['Title']); ?>">
-                                        <?php else: ?>
-                                            <div class="review-image-placeholder">Review sách</div>
-                                        <?php endif; ?>
-                                    </div>
-
-                                    <div class="review-card-body">
-                                        <h3 class="review-title"><?php echo htmlspecialchars($post['Title']); ?></h3>
-
-                                        <p class="review-meta">
-                                            <?php
-                                            $author = $post['AuthorName'] ?: 'Moonlit';
-                                            $date = !empty($post['CreatedAt']) ? date('d/m/Y', strtotime($post['CreatedAt'])) : '';
-                                            echo 'Bởi ' . htmlspecialchars($author) . ($date ? ' • ' . $date : '');
-                                            ?>
-                                        </p>
-
-                                        <p class="review-excerpt">
-                                            <?php echo htmlspecialchars(mb_strimwidth($post['Excerpt'] ?? '', 0, 120, '...')); ?>
-                                        </p>
-                                    </div>
-                                </a>
-                            </article>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <p class="home-empty-text">Chưa có bài review nào. Admin hãy thêm bài trong trang quản trị.</p>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </section>
 
     </main>
 
