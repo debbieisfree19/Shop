@@ -5,13 +5,16 @@
 
 session_start();
 require_once 'db_connect.php';
+ob_start();
+if (isset($_SESSION['redirect_tab'])) {
+    $tab = $_SESSION['redirect_tab'];
+    unset($_SESSION['redirect_tab']);
+}
+if (isset($_SESSION['flash_success'])) {
+    $success_message = $_SESSION['flash_success'];
+    unset($_SESSION['flash_success']);
+}
 
-// ==== CHECK QUYỀN ADMIN ====
-// Sau này dùng thật thì bỏ comment để chỉ admin mới vào được
-// if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
-//     header('Location: shop.php');
-//     exit;
-// }
 
 $currentUsername = $_SESSION['username'] ?? 'Admin';
 
@@ -28,7 +31,7 @@ function h($str)
 {
     return htmlspecialchars((string) $str, ENT_QUOTES, 'UTF-8');
 }
-
+ob_end_flush();
 
 
 
@@ -116,7 +119,7 @@ function h($str)
                         </li>
 
                         <li class="dropdown">
-                            <a class="dropdown-toggle <?= in_array($tab, ['voucher', 'posts']) ? 'active' : '' ?>" href="#"
+                            <a class="dropdown-toggle <?= in_array($tab, ['voucher', 'posts','blogs']) ? 'active' : '' ?>" href="#"
                                 data-bs-toggle="dropdown">
                                 Marketing
                             </a>
@@ -128,7 +131,7 @@ function h($str)
                                     </a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item <?= $tab === 'posts' ? 'active' : '' ?>" href="?tab=posts">
+                                    <a class="dropdown-item <?= $tab === 'blogs' ? 'active' : '' ?>" href="?tab=blogs">
                                         Blog
                                     </a>
                                 </li>
@@ -144,7 +147,7 @@ function h($str)
                             <a class="<?= $tab === 'employee' ? 'active' : '' ?>" href="?tab=employee">Nhân viên</a>
                         </li>
                         <li class="dropdown">
-                            <a class="dropdown-toggle <?= in_array($tab, ['voucher', 'posts']) ? 'active' : '' ?>" href="#"
+                            <a class="dropdown-toggle <?= in_array($tab, ['carriers', 'publishers']) ? 'active' : '' ?>" href="#"
                                 data-bs-toggle="dropdown">
                                 Đối tác
                             </a>
@@ -164,6 +167,9 @@ function h($str)
                             </ul>
                         </li>
                         <li>
+                            <a class="<?= $tab === 'contact' ? 'active' : '' ?>" href="?tab=contact">Contact</a>
+                        </li>
+                        <li>
                             <a class="<?= $tab === 'setting' ? 'active' : '' ?>" href="?tab=setting">Cài đặt</a>
                         </li>
 
@@ -181,10 +187,11 @@ function h($str)
                 'customers',
                 'voucher',
                 'employee',
-                'blog',
+                'blogs',
                 'forum',
                 'publishers',
                 'carriers',
+                'contact',
                 'setting'
             ];
 
@@ -193,7 +200,7 @@ function h($str)
             }
 
             $tabFile = __DIR__ . "/admin-$tab.php";
-
+            
             if (file_exists($tabFile)) {
                 require $tabFile;
             } else {
