@@ -303,7 +303,7 @@ Mọi thông tin của bạn sẽ được bảo mật dưới quyền truy cậ
 
 <section class="contact-section">
 <h2 style="color:var(--color-deep-blue)">FAQs</h2>
-
+<br>
 <div class="faq-item">
   <h4>⏱ Giao hàng ở Moonlit thường mất bao lâu?</h4>
   <p>
