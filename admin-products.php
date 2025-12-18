@@ -52,6 +52,91 @@ function generatePublisherID(PDO $pdo): string
 
     return 'N' . str_pad($nextId, 5, '0', STR_PAD_LEFT);
 }
+require_once 'db_connect.php';
+//====== Hàm sinh Publisher dạng SKU001 ======
+function generateSKUID(PDO $pdo): string
+{
+    $stmt = $pdo->query("
+        SELECT MAX(CAST(SUBSTRING(SKUID, 4) AS UNSIGNED)) AS max_id
+        FROM SKU
+        WHERE SKUID LIKE 'SKU%'
+    ");
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    $nextId = ($row['max_id'] ?? 0) + 1;
+
+    return 'SKU' . str_pad($nextId, 3, '0', STR_PAD_LEFT);
+}
+/* ===== AJAX LOAD SKU ===== */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_load_sku') {
+    header('Content-Type: application/json; charset=utf-8');
+    ob_clean();
+
+    try {
+        $pid = trim($_POST['product_id'] ?? '');
+        if ($pid === '') {
+            throw new Exception('Thiếu ProductID');
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT SKUID, Format, SellPrice, Stock, Status
+            FROM SKU
+            WHERE ProductID = :pid
+            ORDER BY SKUID
+        ");
+        $stmt->execute([':pid' => $pid]);
+
+        echo json_encode([
+            'success' => true,
+            'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+    }
+    exit;
+}
+/* ===== AJAX DELETE SKU ===== */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_delete_sku') {
+    header('Content-Type: application/json; charset=utf-8');
+    ob_clean();
+
+    try {
+        $skuid = trim($_POST['skuid'] ?? '');
+        if ($skuid === '') {
+            throw new Exception('Thiếu SKUID');
+        }
+
+        $pdo->beginTransaction();
+
+        // Xoá sale của SKU
+        $pdo->prepare("
+            DELETE FROM PRODUCT_SALE
+            WHERE SKUID = :skuid
+        ")->execute([':skuid' => $skuid]);
+
+        // Xoá SKU
+        $pdo->prepare("
+            DELETE FROM SKU
+            WHERE SKUID = :skuid
+        ")->execute([':skuid' => $skuid]);
+
+        $pdo->commit();
+
+        echo json_encode([
+            'success' => true
+        ]);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+    }
+    exit;
+}
 
 //Xử lý load trang sau mỗi lần thêm
 // ===== AJAX thêm category  =====
@@ -175,9 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo->beginTransaction();
             $productId = generateProductID($pdo);
-            $skuId = 'S' . substr(uniqid(), -5);
-
-
+            $skuId = generateSKUID($pdo);
             $name = trim($_POST['name'] ?? '');
             $description = trim($_POST['description'] ?? '');
             $price = trim($_POST['price'] ?? '');
@@ -221,7 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("
                                 INSERT INTO SKU
                                 (SKUID, ProductID, Format, BuyPrice, SellPrice, Stock, Status)
-                                VALUES (:skuid, :pid, 'Paperback', :buy, :sell, 0, 1)
+                                VALUES (:skuid, :pid, 'Paperback', :buy, :sell, 50, 1)
                             ")->execute([
                         ':skuid' => $skuId,
                         ':pid' => $productId,
@@ -245,10 +328,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->commit();
             $success_message = 'Đã thêm sản phẩm';
 
+            exit;
         } catch (Exception $e) {
             $pdo->rollBack();
             $error_message = $e->getMessage();
         }
+
     } else if ($action === 'update') {
         try {
             $pdo->beginTransaction();
@@ -323,10 +408,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->rollBack();
             $error_message = $e->getMessage();
         }
+    } else if ($action === 'add_sku') {
+        try {
+            $skuId = generateSKUID($pdo);
+            $pdo->prepare("
+            INSERT INTO SKU
+            (SKUID, ProductID, Format, BuyPrice, SellPrice, Stock, Status)
+            VALUES (:id, :pid, :format, :buy, :sell, :stock, 1)
+        ")->execute([
+                        ':id' => $skuId,
+                        ':pid' => $_POST['product_id'],
+                        ':format' => $_POST['format'],
+                        ':buy' => $_POST['sell_price'],
+                        ':sell' => $_POST['sell_price'],
+                        ':stock' => $_POST['stock']
+                    ]);
+
+            $success_message = 'Đã thêm SKU mới';
+
+            exit;
+        } catch (Exception $e) {
+            $error_message = $e->getMessage();
+        }
     }
-
-
 }
+
+
 $pubStmt = $pdo->query("
     SELECT PublisherID, PublisherName
     FROM publisher
@@ -370,8 +477,7 @@ GROUP BY p.ProductID;
     $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
-} 
-catch (Exception $e) {
+} catch (Exception $e) {
     $error_message = 'Không thể tải danh sách sản phẩm: ' . $e->getMessage();
 }
 ?>
@@ -545,9 +651,9 @@ catch (Exception $e) {
                                     <td><?php echo htmlspecialchars($p['Categories'] ?? ''); ?></td>
                                     <td><?php echo htmlspecialchars($p['PublisherName'] ?? ''); ?></td>
                                     <td>
-                                        <?php if (!empty($p['DiscountPrice'])): ?>
+                                        <?php if (!empty($p['DiscountedPrice'])): ?>
                                             <span class="cart-price-current">
-                                                <?php echo number_format($p['DiscountPrice'], 0, ',', '.'); ?> đ
+                                                <?php echo number_format($p['DiscountedPrice'], 0, ',', '.'); ?> đ
                                             </span>
                                             <span class="cart-price-old">
                                                 <?php echo number_format($p['Price'], 0, ',', '.'); ?> đ
@@ -574,6 +680,16 @@ catch (Exception $e) {
                                                 onclick="return confirm('Xóa sản phẩm này?');">
                                                 Xóa
                                             </button>
+                                            <button type="button" class="btn btn-sm btn-outline-success" data-bs-toggle="modal"
+                                                data-bs-target="#skuModal" data-product="<?= $p['ProductID'] ?>">
+                                                Thêm SKU
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                data-bs-toggle="modal" data-bs-target="#skuListModal"
+                                                data-product="<?= $p['ProductID'] ?>">
+                                                Xem SKU
+                                            </button>
+
                                         </form>
                                     </td>
                                 </tr>
@@ -641,6 +757,60 @@ catch (Exception $e) {
                         <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
                     </div>
                 </form>
+
+            </div>
+        </div>
+        <div class="modal fade" id="skuModal" tabindex="-1">
+            <div class="modal-dialog">
+                <form method="POST" class="modal-content">
+                    <input type="hidden" name="action" value="add_sku">
+                    <input type="hidden" name="product_id" id="sku_product_id">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Thêm đặc tính (SKU)</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body row g-3">
+                        <div class="col-12">
+                            <label class="account-label">Đặc tính / Format</label>
+                            <input type="text" name="format" class="account-input w-100"
+                                placeholder="VD: Hardcover / Paperback / Special Edition" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="account-label">Giá bán</label>
+                            <input type="number" name="sell_price" class="account-input w-100" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="account-label">Tồn kho</label>
+                            <input type="number" name="stock" class="account-input w-100" value="0">
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="btn btn-primary">Thêm SKU</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="modal fade" id="skuListModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Danh sách SKU</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div id="skuListContent">
+                            <p class="text-muted">Đang tải SKU...</p>
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
 
@@ -714,13 +884,163 @@ catch (Exception $e) {
                 document.getElementById('edit_name').value = btn.dataset.name;
                 document.getElementById('edit_price').value = btn.dataset.price;
             });
+            document.getElementById('skuModal')
+                .addEventListener('show.bs.modal', e => {
+                    document.getElementById('sku_product_id').value =
+                        e.relatedTarget.dataset.product;
+                });
+            const skuListModal = document.getElementById('skuListModal');
+
+            skuListModal.addEventListener('show.bs.modal', function (e) {
+                const productId = e.relatedTarget.dataset.product;
+                const box = document.getElementById('skuListContent');
+
+                box.innerHTML = '<p class="text-muted">Đang tải...</p>';
+
+                const fd = new FormData();
+                fd.append('action', 'ajax_load_sku');
+                fd.append('product_id', productId);
+
+                fetch('admin-products.php', {
+                    method: 'POST',
+                    body: fd
+                })
+                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.success || res.data.length === 0) {
+                            box.innerHTML = '<p class="text-muted">Sản phẩm chưa có SKU</p>';
+                            return;
+                        }
+
+                        let html = `
+        <table class="table table-bordered">
+          <thead>
+            <tr>
+              <th>SKUID</th>
+              <th>Đặc tính</th>
+              <th>Giá</th>
+              <th>Tồn kho</th>
+              <th>Trạng thái</th>
+              <th class="text-center">Xóa</th>
+            </tr>
+          </thead>
+          <tbody>
+        `;
+
+                        res.data.forEach(sku => {
+                            html += `
+            <tr>
+              <td>${sku.SKUID}</td>
+              <td>${sku.Format}</td>
+              <td>${Number(sku.SellPrice).toLocaleString()} đ</td>
+              <td>${sku.Stock}</td>
+              <td>${sku.Status == 1 ? 'Đang bán' : 'Ẩn'}</td>
+              <td class="text-center">
+              <button class="btn btn-sm btn-outline-danger"
+                onclick="deleteSKU('${sku.SKUID}', '${productId}')">
+                Xóa
+              </button>
+                </td>
+            </tr>
+            `;
+                        });
+
+                        html += '</tbody></table>';
+                        box.innerHTML = html;
+                    })
+                    .catch(() => {
+                        box.innerHTML = '<p class="text-danger">Lỗi tải SKU</p>';
+                    });
+            });
+            function deleteSKU(skuid, productId) {
+                if (!confirm('Xóa SKU này?')) return;
+
+                const fd = new FormData();
+                fd.append('action', 'ajax_delete_sku');
+                fd.append('skuid', skuid);
+
+                fetch('admin-products.php', {
+                    method: 'POST',
+                    body: fd
+                })
+                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.success) {
+                            alert(res.message || 'Xóa SKU thất bại');
+                            return;
+                        }
+
+                        // reload lại danh sách SKU
+                        const box = document.getElementById('skuListContent');
+                        box.innerHTML = '<p class="text-muted">Đang tải...</p>';
+
+                        const reloadFd = new FormData();
+                        reloadFd.append('action', 'ajax_load_sku');
+                        reloadFd.append('product_id', productId);
+
+                        return fetch('admin-products-ajax.php', {
+                            method: 'POST',
+                            body: reloadFd
+                        });
+                    })
+                    .then(res => res ? res.json() : null)
+                    .then(res => {
+                        if (!res) return;
+
+                        if (!res.success || res.data.length === 0) {
+                            document.getElementById('skuListContent').innerHTML =
+                                '<p class="text-muted">Sản phẩm chưa có SKU</p>';
+                            return;
+                        }
+
+                        let html = `
+            <table class="table table-bordered">
+              <thead>
+                <tr>
+                  <th>SKUID</th>
+                  <th>Đặc tính</th>
+                  <th>Giá</th>
+                  <th>Tồn kho</th>
+                  <th>Trạng thái</th>
+                  <th class="text-center">Xóa</th>
+                </tr>
+              </thead>
+              <tbody>
+            `;
+
+                        res.data.forEach(sku => {
+                            html += `
+                <tr>
+                  <td>${sku.SKUID}</td>
+                  <td>${sku.Format}</td>
+                  <td>${Number(sku.SellPrice).toLocaleString()} đ</td>
+                  <td>${sku.Stock}</td>
+                  <td>${sku.Status == 1 ? 'Đang bán' : 'Ẩn'}</td>
+                  <td class="text-center">
+                    <button class="btn btn-sm btn-outline-danger"
+                        onclick="deleteSKU('${sku.SKUID}', '${productId}')">
+                        Xóa
+                    </button>
+                  </td>
+                </tr>
+                `;
+                        });
+
+                        html += '</tbody></table>';
+                        document.getElementById('skuListContent').innerHTML = html;
+                    })
+                    .catch(() => {
+                        alert('Lỗi khi xóa SKU');
+                    });
+            }
+
         </script>
 
     </main>
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
-    </script>
-</body>
 
-</html>
+</body >
+
+</html >
