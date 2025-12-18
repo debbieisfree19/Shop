@@ -71,18 +71,18 @@ JOIN (
   SELECT
     s.ProductID,
 
+    -- giá hiển thị nhỏ nhất (sale đang chạy thì lấy sale, không thì lấy sellprice)
     MIN(
       CASE
         WHEN ps.DiscountedPrice IS NOT NULL
          AND ps.StartDate <= NOW()
          AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
         THEN ps.DiscountedPrice
-        WHEN s.DiscountPrice IS NOT NULL
-        THEN s.DiscountPrice
         ELSE s.SellPrice
       END
     ) AS MinFinalPrice,
 
+    -- skuid rẻ nhất (để bấm vào variant rẻ nhất nếu muốn)
     SUBSTRING_INDEX(
       GROUP_CONCAT(
         s.SKUID ORDER BY
@@ -91,8 +91,6 @@ JOIN (
              AND ps.StartDate <= NOW()
              AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
             THEN ps.DiscountedPrice
-            WHEN s.DiscountPrice IS NOT NULL
-            THEN s.DiscountPrice
             ELSE s.SellPrice
           END ASC,
           s.SKUID ASC
@@ -101,6 +99,7 @@ JOIN (
       ',', 1
     ) AS CheapestSKUID,
 
+    -- giá gốc tương ứng với skuid rẻ nhất (luôn là SellPrice)
     SUBSTRING_INDEX(
       GROUP_CONCAT(
         s.SellPrice ORDER BY
@@ -109,8 +108,6 @@ JOIN (
              AND ps.StartDate <= NOW()
              AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
             THEN ps.DiscountedPrice
-            WHEN s.DiscountPrice IS NOT NULL
-            THEN s.DiscountPrice
             ELSE s.SellPrice
           END ASC,
           s.SKUID ASC

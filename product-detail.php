@@ -1,17 +1,28 @@
 <?php
 /**
- * MOONLIT STORE - PRODUCT DETAIL PAGE (BLOB IMAGE)
+ * MOONLIT STORE - PRODUCT DETAIL PAGE (DB NEW - SALE ONLY IN PRODUCT_SALE)
+ * - Product + SKU variants
+ * - FinalPrice = active PRODUCT_SALE.DiscountedPrice else SKU.SellPrice
+ * - Show old price (SellPrice) with strikethrough when on sale
+ * - Review submit fixed (load product first)
  */
 
 session_start();
 require_once 'db_connect.php';
 
-// Trạng thái đăng nhập
+/* ===================== AUTH STATE ===================== */
 $isLoggedIn      = isset($_SESSION['user_id']);
 $currentUsername = $_SESSION['username'] ?? '';
-$currentUserId   = $_SESSION['user_id'] ?? '';
+$currentUserId   = $_SESSION['user_id'] ?? null;
 
-// Lấy id sản phẩm từ query string
+$currentPage = 'product-detail.php';
+if (!function_exists('nav_active')) {
+    function nav_active(string $page, string $currentPage): string {
+        return $page === $currentPage ? 'nav-active' : '';
+    }
+}
+
+/* ===================== INPUT ===================== */
 $productKey = trim($_GET['id'] ?? '');
 $skuKey     = trim($_GET['sku'] ?? '');
 
@@ -20,61 +31,8 @@ if ($productKey === '' && $skuKey === '') {
     exit;
 }
 
-
-// ============================
-// Xử lý submit đánh giá
-// ============================
-$review_error   = '';
-$review_success = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_review') {
-    if (!$isLoggedIn) {
-        $review_error = 'Bạn cần đăng nhập để gửi đánh giá.';
-    } else {
-        $rating  = isset($_POST['rating']) ? (int)$_POST['rating'] : 0;
-        $comment = trim($_POST['comment'] ?? '');
-
-        if ($rating < 1 || $rating > 5) {
-            $review_error = 'Vui lòng chọn số sao từ 1 đến 5.';
-        } elseif ($comment === '') {
-            $review_error = 'Bạn hãy viết vài dòng cảm nhận nha.';
-        } else {
-            try {
-                // Review table trong script SQL là CreatedAt (không phải CreatedDate)
-                $sqlInsert = "
-                    INSERT INTO Review (ProductID, UserID, Rating, Comment, CreatedDate)
-                    VALUES (:productId, :userId, :rating, :comment, :createdDate)
-                ";
-
-                $stmtIns = $pdo->prepare($sqlInsert);
-                $stmtIns->execute([
-                    ':productId'   => $product['ProductID'],
-                    ':userId'      => $currentUserId,
-                    ':rating'      => $rating,
-                    ':comment'     => $comment,
-                    ':createdDate' => date('Y-m-d H:i:s'),
-                ]);
-
-
-            header('Location: product-detail.php?id=' . urlencode($product['ProductID']) . '&review=success');
-                exit;
-            } catch (Exception $e) {
-                $review_error = 'Không thể lưu đánh giá. Thử lại sau nha.';
-            }
-        }
-    }
-}
-
-if (isset($_GET['review']) && $_GET['review'] === 'success') {
-    $review_success = 'Cảm ơn bạn đã chia sẻ cảm nhận 💛';
-}
-
-// ============================
-// Lấy thông tin sản phẩm + SKU variants
-// ============================
+/* ===================== LOAD PRODUCT (resolve ProductID) ===================== */
 $product = null;
-$variants = [];
-$selectedSku = null;
 $error_message = '';
 
 try {
@@ -84,13 +42,11 @@ try {
         $where = "p.ProductID = :pid";
         $params[':pid'] = $productKey;
     } else {
-        // nếu truyền sku thì tìm product theo SKU table
         $where = "s.SKUID = :skuid";
         $params[':skuid'] = $skuKey;
     }
 
-    // Lấy product + list variants (SKU) + giá final (sale)
-    $sql = "
+    $sqlProduct = "
         SELECT
             p.ProductID,
             p.SKU,
@@ -110,14 +66,23 @@ try {
         LIMIT 1
     ";
 
-    $stmt = $pdo->prepare($sql);
+    $stmt = $pdo->prepare($sqlProduct);
     $stmt->execute($params);
     $product = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$product) {
         $error_message = 'Sản phẩm không tồn tại hoặc đã bị ẩn.';
-    } else {
-        // Lấy variants SKU của product
+    }
+} catch (Exception $e) {
+    $error_message = 'Không thể tải thông tin sản phẩm: ' . $e->getMessage();
+}
+
+/* ===================== LOAD VARIANTS ===================== */
+$variants = [];
+$selectedSku = null;
+
+if ($product && empty($error_message)) {
+    try {
         $skuSql = "
             SELECT
                 s.SKUID,
@@ -125,30 +90,22 @@ try {
                 s.ISBN,
                 s.Stock,
                 s.SellPrice AS OriginalPrice,
-
                 CASE
-                    WHEN psa.DiscountedPrice IS NOT NULL
-                    THEN psa.DiscountedPrice
-                    WHEN s.DiscountPrice IS NOT NULL
-                    THEN s.DiscountPrice
+                    WHEN psa.DiscountedPrice IS NOT NULL THEN psa.DiscountedPrice
                     ELSE s.SellPrice
                 END AS FinalPrice
-
             FROM SKU s
-
-            -- lấy SALE đang hiệu lực (nếu có nhiều dòng sale thì lấy giá thấp nhất)
             LEFT JOIN (
                 SELECT
                     ps.SKUID,
                     MIN(ps.DiscountedPrice) AS DiscountedPrice
                 FROM PRODUCT_SALE ps
                 WHERE ps.StartDate <= NOW()
-                AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+                  AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
                 GROUP BY ps.SKUID
             ) psa ON psa.SKUID = s.SKUID
-
             WHERE s.ProductID = :pid
-            AND s.Status = 1
+              AND s.Status = 1
             ORDER BY FinalPrice ASC, s.SKUID ASC
         ";
 
@@ -156,9 +113,6 @@ try {
         $skuStmt->execute([':pid' => $product['ProductID']]);
         $variants = $skuStmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Chọn sku đang xem:
-        // - nếu URL có ?sku=... thì dùng đó
-        // - không có thì mặc định SKU rẻ nhất (row đầu)
         if (!empty($variants)) {
             if ($skuKey !== '') {
                 foreach ($variants as $v) {
@@ -167,15 +121,77 @@ try {
             }
             if (!$selectedSku) $selectedSku = $variants[0];
         }
+    } catch (Exception $e) {
+        $error_message = 'Không thể tải phiên bản (SKU): ' . $e->getMessage();
     }
-} catch (Exception $e) {
-    $error_message = 'Không thể tải thông tin sản phẩm: ' . $e->getMessage();
 }
 
+/* ===================== HANDLE REVIEW SUBMIT (after product loaded) ===================== */
+$review_error   = '';
+$review_success = '';
 
-// ============================
-// Lấy vài sản phẩm liên quan
-// ============================
+if (isset($_GET['review']) && $_GET['review'] === 'success') {
+    $review_success = 'Cảm ơn bạn đã chia sẻ cảm nhận 💛';
+}
+
+if ($product && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_review') {
+    if (!$isLoggedIn) {
+        $review_error = 'Bạn cần đăng nhập để gửi đánh giá.';
+    } else {
+        $rating  = isset($_POST['rating']) ? (int)$_POST['rating'] : 0;
+        $comment = trim($_POST['comment'] ?? '');
+
+        if ($rating < 1 || $rating > 5) {
+            $review_error = 'Vui lòng chọn số sao từ 1 đến 5.';
+        } elseif ($comment === '') {
+            $review_error = 'Bạn hãy viết vài dòng cảm nhận nha.';
+        } else {
+            try {
+                $sqlInsert = "
+                    INSERT INTO Review (ProductID, UserID, Rating, Comment, CreatedDate)
+                    VALUES (:productId, :userId, :rating, :comment, :createdDate)
+                ";
+                $stmtIns = $pdo->prepare($sqlInsert);
+                $stmtIns->execute([
+                    ':productId'   => $product['ProductID'],
+                    ':userId'      => $currentUserId,
+                    ':rating'      => $rating,
+                    ':comment'     => $comment,
+                    ':createdDate' => date('Y-m-d H:i:s'),
+                ]);
+
+                header('Location: product-detail.php?id=' . urlencode($product['ProductID']) . '&review=success');
+                exit;
+            } catch (Exception $e) {
+                $review_error = 'Không thể lưu đánh giá. Thử lại sau nha.';
+            }
+        }
+    }
+}
+
+/* ===================== LOAD REVIEWS ===================== */
+$reviews = [];
+if ($product) {
+    try {
+        $reviewSql = "
+            SELECT
+                r.Rating,
+                r.Comment,
+                r.CreatedDate,
+                COALESCE(u.Username, u.Email, 'Khách hàng') AS DisplayName
+            FROM Review r
+            LEFT JOIN User_Account u ON r.UserID = u.UserID
+            WHERE r.ProductID = :productId
+            ORDER BY r.CreatedDate DESC
+            LIMIT 20
+        ";
+        $reviewStmt = $pdo->prepare($reviewSql);
+        $reviewStmt->execute([':productId' => $product['ProductID']]);
+        $reviews = $reviewStmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {}
+}
+
+/* ===================== RELATED PRODUCTS (min final price like shop) ===================== */
 $relatedProducts = [];
 if ($product) {
     try {
@@ -187,21 +203,61 @@ if ($product) {
         ";
         $cateStmt = $pdo->prepare($firstCategorySql);
         $cateStmt->execute([':id' => $product['ProductID']]);
-
         $cateRow = $cateStmt->fetch(PDO::FETCH_ASSOC);
 
         if ($cateRow) {
             $cateId = $cateRow['CategoryID'];
+
             $relatedSql = "
                 SELECT
                     p.ProductID,
                     p.ProductName,
-                    p.Price,
-                    (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
+                    CASE WHEN p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0 THEN 1 ELSE 0 END AS HasImage,
+
+                    x.MinFinalPrice,
+                    x.MinOriginalPrice,
+                    CASE WHEN x.MinFinalPrice < x.MinOriginalPrice THEN 1 ELSE 0 END AS IsOnSale
+
                 FROM Product p
-                INNER JOIN Product_Categories pc ON p.ProductID = pc.ProductID
+                JOIN Product_Categories pc ON p.ProductID = pc.ProductID
+
+                JOIN (
+                  SELECT
+                    s.ProductID,
+                    MIN(
+                      CASE
+                        WHEN ps.DiscountedPrice IS NOT NULL
+                         AND ps.StartDate <= NOW()
+                         AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+                        THEN ps.DiscountedPrice
+                        ELSE s.SellPrice
+                      END
+                    ) AS MinFinalPrice,
+
+                    SUBSTRING_INDEX(
+                      GROUP_CONCAT(
+                        s.SellPrice ORDER BY
+                          CASE
+                            WHEN ps.DiscountedPrice IS NOT NULL
+                             AND ps.StartDate <= NOW()
+                             AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+                            THEN ps.DiscountedPrice
+                            ELSE s.SellPrice
+                          END ASC,
+                          s.SKUID ASC
+                        SEPARATOR ','
+                      ),
+                      ',', 1
+                    ) AS MinOriginalPrice
+
+                  FROM SKU s
+                  LEFT JOIN PRODUCT_SALE ps ON ps.SKUID = s.SKUID
+                  WHERE s.Status = 1
+                  GROUP BY s.ProductID
+                ) x ON x.ProductID = p.ProductID
+
                 WHERE pc.CategoryID = :cateId
-                AND p.ProductID <> :productId
+                  AND p.ProductID <> :productId
                 ORDER BY p.CreatedDate DESC
                 LIMIT 4
             ";
@@ -215,51 +271,13 @@ if ($product) {
         }
     } catch (Exception $e) {}
 }
-
-// ============================
-// Lấy review khách hàng
-// ============================
-$reviews = [];
-if ($product) {
-    try {
-        // User_Account không có FullName -> dùng Email
-        $reviewSql = "
-            SELECT
-                r.Rating,
-                r.Comment,
-                r.CreatedDate,
-                u.Email AS DisplayName
-            FROM Review r
-            LEFT JOIN User_Account u ON r.UserID = u.UserID
-            WHERE r.ProductID = :productId
-            ORDER BY r.CreatedDate DESC
-            LIMIT 20
-        ";
-
-        $reviewStmt = $pdo->prepare($reviewSql);
-        $reviewStmt->execute([':productId' => $product['ProductID']]);
-
-        $reviews = $reviewStmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Exception $e) {}
-}
-
-$currentPage = 'shop.php';
-if (!function_exists('nav_active')) {
-    function nav_active(string $page, string $currentPage): string {
-        return $page === $currentPage ? 'nav-active' : '';
-    }
-}
 ?>
-
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>
-        <?php echo $product ? htmlspecialchars($product['ProductName']) . ' - Moonlit Store' : 'Sản phẩm - Moonlit Store'; ?>
-    </title>
+    <title><?php echo $product ? htmlspecialchars($product['ProductName']) . ' - Moonlit Store' : 'Sản phẩm - Moonlit Store'; ?></title>
 
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="moonlit-style.css">
@@ -275,18 +293,10 @@ if (!function_exists('nav_active')) {
             </a>
 
             <nav class="header-menu">
-                <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
-                    Trang chủ
-                </a>
-                <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
-                    Cửa hàng
-                </a>
-                <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
-                    Về chúng tôi
-                </a>
-                <a href="return-policy.php" class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
-                    Chính sách
-                </a>
+                <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">Trang chủ</a>
+                <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">Cửa hàng</a>
+                <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">Về chúng tôi</a>
+                <a href="return-policy.php" class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">Chính sách</a>
             </nav>
         </div>
 
@@ -315,18 +325,13 @@ if (!function_exists('nav_active')) {
     </div>
 </header>
 
-
 <main class="account-main">
     <div class="container">
 
         <div class="mb-3 small">
             <a href="shop.php" class="text-decoration-none" style="color: var(--color-deep-blue);">Cửa hàng</a>
             <span class="text-secondary"> / </span>
-            <?php if ($product): ?>
-                <span><?php echo htmlspecialchars($product['ProductName']); ?></span>
-            <?php else: ?>
-                <span>Sản phẩm</span>
-            <?php endif; ?>
+            <span><?php echo $product ? htmlspecialchars($product['ProductName']) : 'Sản phẩm'; ?></span>
         </div>
 
         <?php if (!empty($error_message)): ?>
@@ -338,7 +343,7 @@ if (!function_exists('nav_active')) {
             <div class="account-card mb-3">
                 <div class="product-detail-layout">
 
-                    <!-- ẢNH SẢN PHẨM (BLOB) -->
+                    <!-- IMAGE -->
                     <div class="product-gallery">
                         <div class="product-gallery-main">
                             <div class="shop-product-image">
@@ -355,7 +360,7 @@ if (!function_exists('nav_active')) {
                         </div>
                     </div>
 
-                    <!-- THÔNG TIN -->
+                    <!-- INFO -->
                     <div class="product-detail-info">
                         <h1 class="account-section-title mb-2">
                             <?php echo htmlspecialchars($product['ProductName']); ?>
@@ -373,18 +378,23 @@ if (!function_exists('nav_active')) {
                             </p>
                         <?php endif; ?>
 
+                        <!-- PRICE (with old price strikethrough) -->
                         <div class="mb-3">
                             <?php if ($selectedSku): ?>
-                                <?php if ((float)$selectedSku['FinalPrice'] < (float)$selectedSku['OriginalPrice']): ?>
+                                <?php
+                                    $final = (float)$selectedSku['FinalPrice'];
+                                    $orig  = (float)$selectedSku['OriginalPrice'];
+                                ?>
+                                <?php if ($final < $orig): ?>
                                     <span class="cart-price-current" style="font-size: 22px;">
-                                        <?php echo number_format((float)$selectedSku['FinalPrice'], 0, ',', '.'); ?> đ
+                                        <?php echo number_format($final, 0, ',', '.'); ?> đ
                                     </span>
-                                    <span class="cart-price-old" style="font-size: 16px; margin-left: 8px;">
-                                        <?php echo number_format((float)$selectedSku['OriginalPrice'], 0, ',', '.'); ?> đ
+                                    <span class="cart-price-old" style="font-size: 16px; margin-left: 8px; text-decoration: line-through; opacity: .65;">
+                                        <?php echo number_format($orig, 0, ',', '.'); ?> đ
                                     </span>
                                 <?php else: ?>
                                     <span class="cart-price-current" style="font-size: 22px;">
-                                        <?php echo number_format((float)$selectedSku['FinalPrice'], 0, ',', '.'); ?> đ
+                                        <?php echo number_format($final, 0, ',', '.'); ?> đ
                                     </span>
                                 <?php endif; ?>
                             <?php else: ?>
@@ -393,7 +403,6 @@ if (!function_exists('nav_active')) {
                                 </span>
                             <?php endif; ?>
                         </div>
-
 
                         <div class="product-description-box">
                             <?php if (!empty($product['Description'])): ?>
@@ -405,44 +414,59 @@ if (!function_exists('nav_active')) {
                             <?php endif; ?>
                         </div>
 
+                        <!-- VARIANTS -->
                         <?php if (!empty($variants)): ?>
                             <div id="variants" class="mb-2">
                                 <label class="account-label mb-1">Chọn phiên bản</label>
                                 <select class="account-input" onchange="location.href='product-detail.php?id=<?php echo urlencode($product['ProductID']); ?>&sku=' + encodeURIComponent(this.value)">
                                     <?php foreach ($variants as $v): ?>
+                                        <?php
+                                            $vFinal = (float)$v['FinalPrice'];
+                                            $vOrig  = (float)$v['OriginalPrice'];
+                                            $label  = ($v['Format'] ?: 'Phiên bản') . ' — ' . number_format($vFinal, 0, ',', '.') . 'đ';
+                                            if ($vFinal < $vOrig) $label .= ' (sale)';
+                                        ?>
                                         <option value="<?php echo htmlspecialchars($v['SKUID']); ?>"
                                             <?php echo ($selectedSku && $selectedSku['SKUID'] === $v['SKUID']) ? 'selected' : ''; ?>>
-                                            <?php
-                                                $label = ($v['Format'] ?: 'Phiên bản') . ' — ' . number_format((float)$v['FinalPrice'], 0, ',', '.') . 'đ';
-                                                echo htmlspecialchars($label);
-                                            ?>
+                                            <?php echo htmlspecialchars($label); ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+
+                                <?php if ($selectedSku && (int)$selectedSku['Stock'] <= 0): ?>
+                                    <div class="small text-danger mt-2">Hết hàng phiên bản này rồi 🥲</div>
+                                <?php else: ?>
+                                    <div class="small text-secondary mt-2">
+                                        Tồn kho: <?php echo (int)($selectedSku['Stock'] ?? 0); ?>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
 
-
+                        <!-- ADD TO CART -->
                         <form action="cart-add.php" method="GET" class="d-flex flex-wrap align-items-end gap-3 mt-3">
-                                <input type="hidden" name="skuid" value="<?php echo htmlspecialchars($selectedSku['SKUID'] ?? ''); ?>">
+                            <input type="hidden" name="skuid" value="<?php echo htmlspecialchars($selectedSku['SKUID'] ?? ''); ?>">
 
                             <div>
                                 <label for="qty" class="account-label mb-1">Số lượng</label>
                                 <input type="number" id="qty" name="qty" min="1" value="1"
-                                       class="account-input" style="max-width: 90px;">
+                                       class="account-input" style="max-width: 90px;"
+                                       <?php echo ($selectedSku && (int)$selectedSku['Stock'] <= 0) ? 'disabled' : ''; ?>>
                             </div>
 
                             <div class="d-flex gap-2 mt-2">
-                                <button type="submit" name="action" value="add_to_cart" class="account-btn-save">
+                                <button type="submit" name="action" value="add_to_cart" class="account-btn-save"
+                                    <?php echo ($selectedSku && (int)$selectedSku['Stock'] <= 0) ? 'disabled' : ''; ?>>
                                     Thêm vào giỏ
                                 </button>
-                                <button type="submit" name="action" value="buy_now" class="account-btn-secondary">
+                                <button type="submit" name="action" value="buy_now" class="account-btn-secondary"
+                                    <?php echo ($selectedSku && (int)$selectedSku['Stock'] <= 0) ? 'disabled' : ''; ?>>
                                     Mua ngay
                                 </button>
                             </div>
                         </form>
-                    </div>
 
+                    </div>
                 </div>
             </div>
 
@@ -501,19 +525,17 @@ if (!function_exists('nav_active')) {
                             <div class="account-order-card" style="padding: 16px;">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <strong style="font-size: 14px;">
-                                        <?php echo htmlspecialchars($rev['DisplayName'] ?? 'Khách hàng ẩn danh'); ?>
+                                        <?php echo htmlspecialchars($rev['DisplayName'] ?? 'Khách hàng'); ?>
                                     </strong>
                                     <span class="small text-secondary">
-                                        <?php
-                                            if (!empty($rev['CreatedDate'])) echo date('d/m/Y', strtotime($rev['CreatedDate']));
-                                        ?>
+                                        <?php if (!empty($rev['CreatedDate'])) echo date('d/m/Y', strtotime($rev['CreatedDate'])); ?>
                                     </span>
                                 </div>
 
                                 <div class="mb-1" style="color: #FFC107; font-size: 14px;">
                                     <?php
-                                    $stars = (int)($rev['Rating'] ?? 0);
-                                    for ($i = 1; $i <= 5; $i++) echo $i <= $stars ? '★' : '☆';
+                                        $stars = (int)($rev['Rating'] ?? 0);
+                                        for ($i = 1; $i <= 5; $i++) echo $i <= $stars ? '★' : '☆';
                                     ?>
                                 </div>
 
@@ -554,11 +576,20 @@ if (!function_exists('nav_active')) {
                                         <?php echo htmlspecialchars($rel['ProductName']); ?>
                                     </h3>
 
-                                    <p class="fw-bold mb-2" style="color: #DC3545;">
-                                        <?php
-                                        $priceShow = $rel['Price'];
-                                        echo number_format($priceShow, 0, ',', '.'); ?> đ
-                                    </p>
+                                    <div class="shop-product-price-row mb-2">
+                                        <?php if (!empty($rel['IsOnSale'])): ?>
+                                            <span class="shop-product-price-current">
+                                                <?php echo number_format((float)$rel['MinFinalPrice'], 0, ',', '.'); ?> đ
+                                            </span>
+                                            <span class="shop-product-price-old" style="text-decoration: line-through; opacity:.65; margin-left:6px;">
+                                                <?php echo number_format((float)$rel['MinOriginalPrice'], 0, ',', '.'); ?> đ
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="shop-product-price-current">
+                                                <?php echo number_format((float)$rel['MinFinalPrice'], 0, ',', '.'); ?> đ
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
 
                                     <div class="mt-auto d-grid gap-1">
                                         <a href="product-detail.php?id=<?php echo urlencode($rel['ProductID']); ?>"
@@ -566,10 +597,9 @@ if (!function_exists('nav_active')) {
                                             Xem chi tiết
                                         </a>
                                         <a href="product-detail.php?id=<?php echo urlencode($rel['ProductID']); ?>#variants"
-                                        class="account-btn-save text-center text-decoration-none">
+                                           class="account-btn-save text-center text-decoration-none">
                                             Chọn phiên bản
                                         </a>
-
                                     </div>
 
                                 </div>
