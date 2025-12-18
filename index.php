@@ -125,6 +125,54 @@ try {
 } catch (Exception $e) {
 }
 
+//Book of the month
+$bookOfTheMonth = null;
+
+try {
+    $stmt = $pdo->query("
+        SELECT
+            p.ProductID,
+            p.ProductName,
+            p.Description,
+            SUM(oi.Quantity) AS TotalSold,
+
+            MIN(
+                CASE
+                    WHEN ps.DiscountedPrice IS NOT NULL
+                    THEN ps.DiscountedPrice
+                    ELSE s.SellPrice
+                END
+            ) AS MinDisplayPrice,
+
+            MAX(s.SellPrice) AS MaxOriginalPrice,
+            MAX(ps.DiscountedPrice IS NOT NULL) AS HasSale,
+
+            (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
+
+        FROM Order_Items oi
+        JOIN SKU s ON s.SKUID = oi.SKU_ID
+        JOIN Product p ON p.ProductID = s.ProductID
+        LEFT JOIN PRODUCT_SALE ps
+            ON ps.SKUID = s.SKUID
+            AND ps.StartDate <= NOW()
+            AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+
+        WHERE p.Status = 1 AND s.Status = 1
+
+        GROUP BY
+            p.ProductID,
+            p.ProductName,
+            p.Description,
+            p.Image
+
+        ORDER BY TotalSold DESC
+        LIMIT 1
+    ");
+
+    $bookOfTheMonth = $stmt->fetch(PDO::FETCH_ASSOC);
+
+} catch (Exception $e) {
+}
 
 
 
@@ -164,8 +212,7 @@ try {
                         class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
                         Về chúng tôi
                     </a>
-                    <a href="return-policy.php"
-                        class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
+                    <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
                         Chính sách
                     </a>
                 </nav>
@@ -286,6 +333,76 @@ try {
                 </div>
             </section>
         <?php endif; ?>
+        <!-- ===== BOOK OF THE MONTH ===== -->
+        <section class="home-section home-section-featured">
+            <div class="container">
+                <div class="home-section-header">
+                    <h2 class="home-section-title">📚 Book of the Month</h2>
+                </div>
+
+                <?php if ($bookOfTheMonth): ?>
+
+                    <!-- ===== CÓ DỮ LIỆU ===== -->
+                    <div class="featured-book-card">
+                        <div class="featured-book-image">
+                            <?php if ($bookOfTheMonth['HasImage']): ?>
+                                <img src="product-image.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>">
+                            <?php else: ?>
+                                <div class="product-image-placeholder">Moonlit</div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="featured-book-info">
+                            <h3><?php echo htmlspecialchars($bookOfTheMonth['ProductName']); ?></h3>
+
+                            <p class="featured-desc">
+                                <?php echo htmlspecialchars(
+                                    mb_strimwidth($bookOfTheMonth['Description'] ?? '', 0, 150, '...')
+                                ); ?>
+                            </p>
+
+                            <div class="product-price-row">
+                                <?php if ($bookOfTheMonth['HasSale']): ?>
+                                    <span class="product-price text-danger">
+                                        <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
+                                    </span>
+                                    <span class="product-old-price">
+                                        <?php echo format_price($bookOfTheMonth['MaxOriginalPrice']); ?>
+                                    </span>
+                                    <span class="product-badge-sale">Bán chạy</span>
+                                <?php else: ?>
+                                    <span class="product-price">
+                                        <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+
+                            <p class="featured-sold">
+                                🔥 Đã bán: <?php echo (int) $bookOfTheMonth['TotalSold']; ?> cuốn
+                            </p>
+
+                            <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
+                                class="account-btn-save">
+                                Xem chi tiết
+                            </a>
+                        </div>
+                    </div>
+
+                <?php else: ?>
+
+                    <!-- ===== CHƯA CÓ DỮ LIỆU ===== -->
+                    <div class="account-empty-state featured-empty">
+                        <p class="account-empty-text">
+                            📭 Hiện chưa có sách nào đủ dữ liệu để trở thành <strong>Book of the Month</strong>.
+                        </p>
+                        <p class="account-empty-subtext">
+                            Hãy quay lại sau khi có đơn hàng đầu tiên nhé ✨
+                        </p>
+                    </div>
+
+                <?php endif; ?>
+            </div>
+        </section>
 
 
 
