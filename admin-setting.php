@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ");
                     $stmt->execute([$compName, $taxCode, $city, $district, $ward, $street, $house, $idToUpdate]);
                     $_SESSION['success_message'] = 'Đã cập nhật thông tin công ty thành công!';
-                    header('Location: admin-dashboard.php?tab=setting');
+                    echo '<script>window.location.href = "admin-dashboard.php?tab=setting";</script>';
                     exit;
                 }
 
@@ -149,7 +149,7 @@ $bannerList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <?php if ($error_message): ?>
     <div class="alert alert-danger"><?php echo htmlspecialchars($error_message); ?></div>
 <?php endif; ?>
-<div class="card mb-4">
+<div class="card mb-4" data-page-id="admin-setting">
     <div class="card-header bg-secondary text-white">
         <h5 class="mb-0"><i class="fas fa-image"></i> Thông tin Doanh Nghiệp</h5>
     </div>
@@ -174,16 +174,16 @@ $bannerList = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <h6 class="text-muted mb-3">Địa chỉ trụ sở</h6>
 
             <div class="col-md-4">
-                <label class="form-label">Tỉnh / Thành phố</label>
-                <select class="form-select" id="company_city" name="city_name">
+                <label class="form-label">Tỉnh / Thành phố <span class="text-danger">*</span></label>
+                <select class="form-select" id="company_city" name="city_name" required>
                     <option value="" selected>Chọn Tỉnh/Thành phố</option>
                 </select>
                 <input type="hidden" id="saved_city" value="<?php echo htmlspecialchars($company['CityName']); ?>">
             </div>
 
             <div class="col-md-4">
-                <label class="form-label">Quận / Huyện</label>
-                <select class="form-select" id="company_district" name="district_name" disabled>
+                <label class="form-label">Quận / Huyện <span class="text-danger">*</span></label>
+                <select class="form-select" id="company_district" name="district_name" required disabled>
                     <option value="" selected>Chọn Quận/Huyện</option>
                 </select>
                 <input type="hidden" id="saved_district"
@@ -191,23 +191,23 @@ $bannerList = $stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
 
             <div class="col-md-4">
-                <label class="form-label">Phường / Xã</label>
-                <select class="form-select" id="company_ward" name="ward_name" disabled>
+                <label class="form-label">Phường / Xã <span class="text-danger">*</span></label>
+                <select class="form-select" id="company_ward" name="ward_name" required disabled>
                     <option value="" selected>Chọn Phường/Xã</option>
                 </select>
                 <input type="hidden" id="saved_ward" value="<?php echo htmlspecialchars($company['WardName']); ?>">
             </div>
 
             <div class="col-md-8">
-                <label class="form-label">Tên đường</label>
+                <label class="form-label">Tên đường <span class="text-danger">*</span></label>
                 <input type="text" name="street_name" class="form-control" placeholder="Ví dụ: Nguyễn Huệ"
-                    value="<?php echo htmlspecialchars($company['StreetName']); ?>">
+                    value="<?php echo htmlspecialchars($company['StreetName']); ?>" required>
             </div>
 
             <div class="col-md-4">
-                <label class="form-label">Số nhà</label>
+                <label class="form-label">Số nhà <span class="text-danger">*</span></label>
                 <input type="text" name="house_number" class="form-control" placeholder="Ví dụ: 123A"
-                    value="<?php echo htmlspecialchars($company['HouseNumber']); ?>">
+                    value="<?php echo htmlspecialchars($company['HouseNumber']); ?>" required>
             </div>
 
             <div class="col-12 text-end mt-4">
@@ -325,104 +325,4 @@ $bannerList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const citySelect = document.getElementById('company_city');
-        const districtSelect = document.getElementById('company_district');
-        const wardSelect = document.getElementById('company_ward');
-
-        const savedCity = document.getElementById('saved_city').value;
-        const savedDistrict = document.getElementById('saved_district').value;
-        const savedWard = document.getElementById('saved_ward').value;
-
-        const API_URL = "https://provinces.open-api.vn/api/?depth=3";
-
-        async function loadVietnamData() {
-            try {
-                let data = window.vnData;
-                if (!data) {
-                    const response = await axios.get(API_URL);
-                    data = response.data;
-                    window.vnData = data;
-                }
-
-                renderOptions(citySelect, data, 'name');
-
-                if (savedCity) {
-                    setSelectValue(citySelect, savedCity);
-                    const cityData = data.find(item => item.name === savedCity);
-                    if (cityData) {
-                        renderOptions(districtSelect, cityData.districts, 'name');
-                        districtSelect.disabled = false;
-
-                        if (savedDistrict) {
-                            setSelectValue(districtSelect, savedDistrict);
-                            const districtData = cityData.districts.find(item => item.name === savedDistrict);
-                            if (districtData) {
-                                renderOptions(wardSelect, districtData.wards, 'name');
-                                wardSelect.disabled = false;
-                                if (savedWard) setSelectValue(wardSelect, savedWard);
-                            }
-                        }
-                    }
-                }
-            } catch (error) { console.error("Lỗi API địa chỉ:", error); }
-        }
-
-        loadVietnamData();
-
-        citySelect.addEventListener('change', function () {
-            districtSelect.innerHTML = '<option value="" selected>Chọn Quận/Huyện</option>';
-            wardSelect.innerHTML = '<option value="" selected>Chọn Phường/Xã</option>';
-            districtSelect.disabled = true;
-            wardSelect.disabled = true;
-
-            const selectedCityName = this.value;
-            if (!selectedCityName || !window.vnData) return;
-
-            const cityData = window.vnData.find(c => c.name === selectedCityName);
-            if (cityData) {
-                renderOptions(districtSelect, cityData.districts, 'name');
-                districtSelect.disabled = false;
-            }
-        });
-
-        districtSelect.addEventListener('change', function () {
-            wardSelect.innerHTML = '<option value="" selected>Chọn Phường/Xã</option>';
-            wardSelect.disabled = true;
-
-            const selectedCityName = citySelect.value;
-            const selectedDistrictName = this.value;
-
-            if (!selectedCityName || !selectedDistrictName || !window.vnData) return;
-
-            const cityData = window.vnData.find(c => c.name === selectedCityName);
-            if (cityData) {
-                const districtData = cityData.districts.find(d => d.name === selectedDistrictName);
-                if (districtData) {
-                    renderOptions(wardSelect, districtData.wards, 'name');
-                    wardSelect.disabled = false;
-                }
-            }
-        });
-
-        function renderOptions(select, data, key) {
-            data.forEach(item => {
-                const opt = document.createElement('option');
-                opt.value = item[key];
-                opt.text = item[key];
-                select.appendChild(opt);
-            });
-        }
-
-        function setSelectValue(select, val) {
-            for (let i = 0; i < select.options.length; i++) {
-                if (select.options[i].value === val) {
-                    select.selectedIndex = i;
-                    break;
-                }
-            }
-        }
-    });
-
-</script>
+<script src="moonlit.js"></script>

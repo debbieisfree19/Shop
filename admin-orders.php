@@ -242,7 +242,7 @@ if (!empty($orderIds)) {
 }
 ?>
 
-<div class="account-card mb-3">
+<div class="account-card mb-3" data-page-id="admin-orders">
     <h2 class="account-card-title">Quản lý Đơn hàng</h2>
 
     <?php if ($message): ?>
@@ -264,7 +264,7 @@ if (!empty($orderIds)) {
         </div>
         
         <div class="col-md-3">
-            <select name="status" id="mainStatus" class="form-select" onchange="toggleSubStatus()">
+            <select name="status" id="mainStatus" class="form-select">
                 <?php foreach ($orderStatuses as $key => $val): ?>
                     <option value="<?php echo $key; ?>" <?php echo $filter === $key ? 'selected' : ''; ?>>
                         <?php echo $val; ?>
@@ -290,27 +290,6 @@ if (!empty($orderIds)) {
             <button type="submit" class="btn btn-primary btn-sm">Lọc</button>
         </div>
     </form>
-
-    <script>
-        function toggleSubStatus() {
-            var main = document.getElementById('mainStatus');
-            var sub = document.getElementById('subStatusContainer');
-            
-            // Nếu chọn "Trả hàng" thì hiện dropdown phụ
-            if (main.value === 'Trả hàng') {
-                sub.style.display = 'block';
-            } else {
-                sub.style.display = 'none';
-                // Reset giá trị dropdown phụ khi ẩn đi để không bị gửi lên URL thừa
-                sub.querySelector('select').value = '';
-            }
-        }
-
-        // Chạy khi load trang để giữ trạng thái hiển thị nếu đang lọc
-        document.addEventListener('DOMContentLoaded', function() {
-            toggleSubStatus();
-        });
-    </script>
 
     <?php if (empty($orders)): ?>
         <div class="text-center p-4 text-muted border rounded bg-light">Không tìm thấy đơn hàng nào.</div>
@@ -579,3 +558,4 @@ if (!empty($orderIds)) {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="moonlit.js"></script>

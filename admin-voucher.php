@@ -227,7 +227,7 @@ $rankMap = [
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" type="text/css" href="moonlit-style.css">
 </head>
-<body class="bg-light p-4">
+<body class="bg-light p-4" data-page-id="admin-voucher">
 <div class="container-fluid">
 
     <?php if ($message): ?>
@@ -506,23 +506,7 @@ $rankMap = [
     </div>
 </div>
 
-<script>
-    function togglePointInput() {
-        var rankSelect = document.getElementById('rankSelect');
-        var pointContainer = document.getElementById('pointContainer');
-        var pointInput = pointContainer.querySelector('input');
-        if (rankSelect.value === 'None') {
-            pointContainer.style.display = 'block';
-            pointInput.disabled = false;
-        } else {
-            pointContainer.style.display = 'none';
-            // Không reset về 0 ở đây nếu đang edit, nhưng khi submit logic PHP sẽ xử lý.
-            // Để UI sạch sẽ:
-            pointInput.disabled = true;
-        }
-    }
-    window.onload = togglePointInput;
-</script>
+<script src="moonlit.js"></script>
 
 </body>
 </html>

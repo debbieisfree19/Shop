@@ -1,7 +1,6 @@
 // moonlit.js
 document.addEventListener('DOMContentLoaded', function () {
   console.log('Moonlit JS loaded ✨');
-
   // Ví dụ: thêm shadow cho header khi cuộn xuống
   const header = document.querySelector('.site-header');
   if (header) {
@@ -345,6 +344,148 @@ document.addEventListener('DOMContentLoaded', function () {
             .catch(err => console.error("Lỗi fetch:", err));
     };
   }
+
+    // SCRIPT QUẢN LÝ VOUCHER TRÊN TRANG ADMIN-VOUCHER
+  const isVoucherPage = document.querySelector('[data-page-id="admin-voucher"]');
+  if (isVoucherPage) {
+    const rankSelect = document.getElementById('rankSelect');
+    const pointContainer = document.getElementById('pointContainer');
+
+    if (rankSelect && pointContainer) {
+      const pointInput = pointContainer.querySelector('input');
+
+      // Tạo một hàm xử lý riêng
+      const handleToggle = function () {
+        if (rankSelect.value === 'None') {
+          pointContainer.style.display = 'block';
+          if (pointInput) pointInput.disabled = false;
+        } else {
+          pointContainer.style.display = 'none';
+          if (pointInput) pointInput.disabled = true;
+        }
+      };
+
+      // Chạy ngay khi load trang (để xử lý trường hợp trang Edit có dữ liệu cũ)
+      handleToggle();
+
+      // QUAN TRỌNG: Lắng nghe sự kiện thay đổi khi người dùng chọn
+      rankSelect.addEventListener('change', handleToggle);
+    }
+}
+    
+    // SCRIPT QUẢN LÝ ĐƠN HÀNG TRÊN TRANG ADMIN-ORDERS (TRẢ HÀNG & THEO DÕI TRẢ HÀNG)
+    const isOrderPage = document.querySelector('[data-page-id="admin-orders"]');
+    if (isOrderPage) {
+        const mainStatus = document.getElementById('mainStatus');
+        const subStatusContainer = document.getElementById('subStatusContainer');
+
+        // 1. Hàm xử lý ẩn/hiện dropdown phụ
+        const handleReturnStatusToggle = () => {
+            if (!mainStatus || !subStatusContainer) return;
+
+            if (mainStatus.value === 'Trả hàng') {
+                subStatusContainer.style.display = 'block';
+            } else {
+                subStatusContainer.style.display = 'none';
+                // Reset giá trị select phụ khi ẩn
+                const subSelect = subStatusContainer.querySelector('select');
+                if (subSelect) subSelect.value = '';
+            }
+        };
+
+        // 2. Chạy ngay khi load trang (để giữ trạng thái sau khi bấm Lọc)
+        handleReturnStatusToggle();
+
+        // 3. Lắng nghe sự kiện thay đổi trên dropdown chính
+        mainStatus.addEventListener('change', handleReturnStatusToggle);
+}
+    // SCRIPT ĐỊA CHÍNH VIỆT NAM TRÊN TRANG ADMIN-SETTING
+    const isSettingPage = document.querySelector('[data-page-id="admin-setting"]');
+    if (isSettingPage) {
+        const citySelect = document.getElementById('company_city');
+        const districtSelect = document.getElementById('company_district');
+        const wardSelect = document.getElementById('company_ward');
+        const savedCity = document.getElementById('saved_city')?.value;
+        const savedDistrict = document.getElementById('saved_district')?.value;
+        const savedWard = document.getElementById('saved_ward')?.value;
+
+        const API_URL = "https://provinces.open-api.vn/api/?depth=3";
+
+        async function loadSettingAddress() {
+            try {
+                let data = window.vnData;
+                if (!data) {
+                    const response = await axios.get(API_URL);
+                    data = response.data;
+                    window.vnData = data;
+                }
+
+                renderOptions(citySelect, data, 'name');
+
+                if (savedCity) {
+                    setSelectValue(citySelect, savedCity);
+                    const cityData = data.find(item => item.name === savedCity);
+                    if (cityData) {
+                        renderOptions(districtSelect, cityData.districts, 'name');
+                        districtSelect.disabled = false;
+                        if (savedDistrict) {
+                            setSelectValue(districtSelect, savedDistrict);
+                            const districtData = cityData.districts.find(item => item.name === savedDistrict);
+                            if (districtData) {
+                                renderOptions(wardSelect, districtData.wards, 'name');
+                                wardSelect.disabled = false;
+                                if (savedWard) setSelectValue(wardSelect, savedWard);
+                            }
+                        }
+                    }
+                }
+            } catch (e) { console.error("Lỗi tải địa chỉ setting:", e); }
+        }
+
+        loadSettingAddress();
+
+        citySelect?.addEventListener('change', function() {
+            districtSelect.innerHTML = '<option value="">Chọn Quận/Huyện</option>';
+            wardSelect.innerHTML = '<option value="">Chọn Phường/Xã</option>';
+            districtSelect.disabled = true; wardSelect.disabled = true;
+            const cityData = window.vnData?.find(c => c.name === this.value);
+            if (cityData) {
+                renderOptions(districtSelect, cityData.districts, 'name');
+                districtSelect.disabled = false;
+            }
+        });
+
+        districtSelect?.addEventListener('change', function() {
+            wardSelect.innerHTML = '<option value="">Chọn Phường/Xã</option>';
+            wardSelect.disabled = true;
+            const cityData = window.vnData?.find(c => c.name === citySelect.value);
+            const districtData = cityData?.districts.find(d => d.name === this.value);
+            if (districtData) {
+                renderOptions(wardSelect, districtData.wards, 'name');
+                wardSelect.disabled = false;
+            }
+        });
+        function renderOptions(selectElement, dataArray, keyName) {
+            if (!selectElement || !dataArray) return;
+            dataArray.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item[keyName];
+                option.text = item[keyName];
+                selectElement.appendChild(option);
+            });
+        }
+
+        function setSelectValue(selectElement, value) {
+            if (!selectElement || !value) return;
+            for (let i = 0; i < selectElement.options.length; i++) {
+                if (selectElement.options[i].value === value) {
+                    selectElement.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
 });
 
 

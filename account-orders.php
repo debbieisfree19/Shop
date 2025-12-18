@@ -274,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
 // [PHÂN TRANG 1] Cấu hình
 $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-$limit = 2; // Số đơn hàng muốn hiện mỗi trang
+$limit = 5; // Số đơn hàng muốn hiện mỗi trang
 $offset = ($page - 1) * $limit;
 
 // [PHÂN TRANG 2] Xây dựng điều kiện lọc (WHERE clause)
