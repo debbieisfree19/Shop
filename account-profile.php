@@ -116,23 +116,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="row">
                 <div class="col-md-6 mb-3">
-                    <label for="username" class="form-label account-label">Tên đăng nhập</label>
+                    <label for="username" class="form-label account-label">Tên đăng nhập <span class="text-danger">*</span></label>
                     <input type="text" class="form-control account-input" id="username" value="<?php echo htmlspecialchars($user['Username']); ?>" disabled>
                 </div>
 
                 <div class="col-md-6 mb-3">
-                    <label for="full_name" class="form-label account-label">Họ và tên</label>
-                    <input type="text" class="form-control account-input" id="full_name" name="full_name" value="<?php echo htmlspecialchars($user['FullName'] ?? ''); ?>">
+                    <label for="full_name" class="form-label account-label">Họ và tên <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control account-input" id="full_name" name="full_name" value="<?php echo htmlspecialchars($user['FullName'] ?? ''); ?>" required>
                 </div>
 
                 <div class="col-md-6 mb-3">
-                    <label for="email" class="form-label account-label">Email</label>
+                    <label for="email" class="form-label account-label">Email <span class="text-danger">*</span></label>
                     <input type="email" class="form-control account-input" id="email" name="email" value="<?php echo htmlspecialchars($user['Email'] ?? ''); ?>" required>
                 </div>
 
                 <div class="col-md-6 mb-3">
-                    <label for="phone" class="form-label account-label">Số điện thoại</label>
-                    <input type="tel" class="form-control account-input" id="phone" name="phone" value="<?php echo htmlspecialchars($user['Phone'] ?? ''); ?>">
+                    <label for="phone" class="form-label account-label">Số điện thoại <span class="text-danger">*</span></label>
+                    <input type="tel" class="form-control account-input" id="phone" name="phone" value="<?php echo htmlspecialchars($user['Phone'] ?? ''); ?>" required>
                 </div>
             </div>
 
@@ -164,12 +164,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
 
                 <div class="col-md-8 mb-3">
-                    <label for="street" class="form-label account-label">Tên đường</label>
+                    <label for="street" class="form-label account-label">Tên đường <span class="text-danger">*</span></label>
                     <input type="text" class="form-control account-input" id="street" name="street" value="<?php echo htmlspecialchars($user['Street'] ?? ''); ?>" placeholder="Ví dụ: Đường Nguyễn Huệ">
                 </div>
 
                 <div class="col-md-4 mb-3">
-                    <label for="house_number" class="form-label account-label">Số nhà</label>
+                    <label for="house_number" class="form-label account-label">Số nhà <span class="text-danger">*</span></label>
                     <input type="text" class="form-control account-input" id="house_number" name="house_number" value="<?php echo htmlspecialchars($user['HouseNumber'] ?? ''); ?>" placeholder="Ví dụ: 123A">
                 </div>
             </div>

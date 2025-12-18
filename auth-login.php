@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <form method="POST" class="auth-form">
                         <div class="mb-3">
-                            <label for="username" class="form-label auth-label">Tên đăng nhập</label>
+                            <label for="username" class="form-label auth-label">Tên đăng nhập <span class="text-danger">*</span></label>
                             <input
                                 type="text"
                                 class="form-control auth-input"
@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
 
                         <div class="mb-3">
-                            <label for="password" class="form-label auth-label">Mật khẩu</label>
+                            <label for="password" class="form-label auth-label">Mật khẩu <span class="text-danger">*</span></label>
                             <input
                                 type="password"
                                 class="form-control auth-input"
