@@ -199,7 +199,7 @@ if ($selectedBlogID) {
 <div class="blog-grid">
 <?php foreach($categoryBlogs as $blog): ?>
 <div class="blog-card">
-    <img src="img/blogs/<?= htmlspecialchars($blog['Thumbnail']) ?>">
+    <img src="<?= htmlspecialchars($blog['Thumbnail']) ?>" alt="<?= htmlspecialchars($blog['Title']) ?>">
     <div class="blog-card-content">
         <h3><?= htmlspecialchars($blog['Title']) ?></h3>
         <p><?= mb_substr(strip_tags($blog['Content']),0,120) ?>...</p>
@@ -218,7 +218,7 @@ if ($selectedBlogID) {
 <section class="blog-section blog-detail">
 <h2><?= htmlspecialchars($selectedBlog['Title']) ?></h2>
 <br>
-<img src="img/blogs/<?= htmlspecialchars($selectedBlog['Thumbnail']) ?>">
+<img src="<?= htmlspecialchars($selectedBlog['Thumbnail']) ?>" alt="<?= htmlspecialchars($selectedBlog['Title']) ?>">
 <div class="blog-detail-content">
 <?= nl2br($selectedBlog['Content']) ?>
 </div>
