@@ -42,19 +42,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_r
             try {
                 // Review table trong script SQL là CreatedAt (không phải CreatedDate)
                 $sqlInsert = "
-                    INSERT INTO Review (ProductID, UserID, Rating, Comment, CreatedAt)
-                    VALUES (:productId, :userId, :rating, :comment, :createdAt)
+                    INSERT INTO Review (ProductID, UserID, Rating, Comment, CreatedDate)
+                    VALUES (:productId, :userId, :rating, :comment, :createdDate)
                 ";
+
                 $stmtIns = $pdo->prepare($sqlInsert);
                 $stmtIns->execute([
-                    ':productId' => $product['ProductID'],
-                    ':userId'    => $currentUserId,
-                    ':rating'    => $rating,
-                    ':comment'   => $comment,
-                    ':createdAt' => date('Y-m-d H:i:s'),
+                    ':productId'   => $product['ProductID'],
+                    ':userId'      => $currentUserId,
+                    ':rating'      => $rating,
+                    ':comment'     => $comment,
+                    ':createdDate' => date('Y-m-d H:i:s'),
                 ]);
 
-                header('Location: product-detail.php?id=' . urlencode($productId) . '&review=success');
+
+            header('Location: product-detail.php?id=' . urlencode($product['ProductID']) . '&review=success');
                 exit;
             } catch (Exception $e) {
                 $review_error = 'Không thể lưu đánh giá. Thử lại sau nha.';
@@ -68,57 +70,108 @@ if (isset($_GET['review']) && $_GET['review'] === 'success') {
 }
 
 // ============================
-// Lấy thông tin sản phẩm
+// Lấy thông tin sản phẩm + SKU variants
 // ============================
 $product = null;
+$variants = [];
+$selectedSku = null;
 $error_message = '';
 
 try {
-    $where = "";
-$params = [];
+    $params = [];
 
-if ($productKey !== '') {
-    $where = "p.ProductID = :key";
-    $params[':key'] = $productKey;
-} else {
-    $where = "p.SKU = :key";
-    $params[':key'] = $skuKey;
-}
+    if ($productKey !== '') {
+        $where = "p.ProductID = :pid";
+        $params[':pid'] = $productKey;
+    } else {
+        // nếu truyền sku thì tìm product theo SKU table
+        $where = "s.SKUID = :skuid";
+        $params[':skuid'] = $skuKey;
+    }
 
-$sql = "
-    SELECT
-        p.ProductID,
-        p.SKU,
-        p.ProductName,
-        p.Description,
-        p.Price,
-        p.DiscountPrice,
-        p.CreatedDate,
-        (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage,
-        pub.PublisherName,
-        GROUP_CONCAT(DISTINCT c.CategoryName SEPARATOR ', ') AS Categories
-    FROM Product p
-    LEFT JOIN Publisher pub ON p.PublisherID = pub.PublisherID
-    LEFT JOIN Product_Categories pc ON p.ProductID = pc.ProductID
-    LEFT JOIN Categories c ON pc.CategoryID = c.CategoryID
-    WHERE $where
-    GROUP BY
-        p.ProductID, p.SKU, p.ProductName, p.Description, p.Price, p.DiscountPrice,
-        p.CreatedDate, HasImage, pub.PublisherName
-    LIMIT 1
-";
+    // Lấy product + list variants (SKU) + giá final (sale)
+    $sql = "
+        SELECT
+            p.ProductID,
+            p.SKU,
+            p.ProductName,
+            p.Description,
+            p.CreatedDate,
+            (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage,
+            pub.PublisherName,
+            GROUP_CONCAT(DISTINCT c.CategoryName SEPARATOR ', ') AS Categories
+        FROM Product p
+        LEFT JOIN Publisher pub ON p.PublisherID = pub.PublisherID
+        LEFT JOIN Product_Categories pc ON p.ProductID = pc.ProductID
+        LEFT JOIN Categories c ON pc.CategoryID = c.CategoryID
+        LEFT JOIN SKU s ON s.ProductID = p.ProductID
+        WHERE $where
+        GROUP BY p.ProductID
+        LIMIT 1
+    ";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$product = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $product = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$product) {
         $error_message = 'Sản phẩm không tồn tại hoặc đã bị ẩn.';
+    } else {
+        // Lấy variants SKU của product
+        $skuSql = "
+            SELECT
+                s.SKUID,
+                s.Format,
+                s.ISBN,
+                s.Stock,
+                s.SellPrice AS OriginalPrice,
+
+                CASE
+                    WHEN psa.DiscountedPrice IS NOT NULL
+                    THEN psa.DiscountedPrice
+                    WHEN s.DiscountPrice IS NOT NULL
+                    THEN s.DiscountPrice
+                    ELSE s.SellPrice
+                END AS FinalPrice
+
+            FROM SKU s
+
+            -- lấy SALE đang hiệu lực (nếu có nhiều dòng sale thì lấy giá thấp nhất)
+            LEFT JOIN (
+                SELECT
+                    ps.SKUID,
+                    MIN(ps.DiscountedPrice) AS DiscountedPrice
+                FROM PRODUCT_SALE ps
+                WHERE ps.StartDate <= NOW()
+                AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+                GROUP BY ps.SKUID
+            ) psa ON psa.SKUID = s.SKUID
+
+            WHERE s.ProductID = :pid
+            AND s.Status = 1
+            ORDER BY FinalPrice ASC, s.SKUID ASC
+        ";
+
+        $skuStmt = $pdo->prepare($skuSql);
+        $skuStmt->execute([':pid' => $product['ProductID']]);
+        $variants = $skuStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Chọn sku đang xem:
+        // - nếu URL có ?sku=... thì dùng đó
+        // - không có thì mặc định SKU rẻ nhất (row đầu)
+        if (!empty($variants)) {
+            if ($skuKey !== '') {
+                foreach ($variants as $v) {
+                    if ($v['SKUID'] === $skuKey) { $selectedSku = $v; break; }
+                }
+            }
+            if (!$selectedSku) $selectedSku = $variants[0];
+        }
     }
 } catch (Exception $e) {
     $error_message = 'Không thể tải thông tin sản phẩm: ' . $e->getMessage();
 }
+
 
 // ============================
 // Lấy vài sản phẩm liên quan
@@ -133,32 +186,31 @@ if ($product) {
             LIMIT 1
         ";
         $cateStmt = $pdo->prepare($firstCategorySql);
-        $cateStmt->execute([':productId' => $product['ProductID']
-]);
+        $cateStmt->execute([':id' => $product['ProductID']]);
+
         $cateRow = $cateStmt->fetch(PDO::FETCH_ASSOC);
 
         if ($cateRow) {
-            $cateId = (int)$cateRow['CategoryID'];
-
+            $cateId = $cateRow['CategoryID'];
             $relatedSql = "
                 SELECT
                     p.ProductID,
                     p.ProductName,
                     p.Price,
-                    p.DiscountPrice,
                     (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
                 FROM Product p
                 INNER JOIN Product_Categories pc ON p.ProductID = pc.ProductID
                 WHERE pc.CategoryID = :cateId
-                  AND p.ProductID <> :id
+                AND p.ProductID <> :productId
                 ORDER BY p.CreatedDate DESC
                 LIMIT 4
             ";
 
             $relStmt = $pdo->prepare($relatedSql);
             $relStmt->execute([
-                ':cateId' => $cateId,
-                 ':productId' => $product['ProductID']]);
+                ':cateId'    => $cateId,
+                ':productId' => $product['ProductID']
+            ]);
             $relatedProducts = $relStmt->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (Exception $e) {}
@@ -175,21 +227,31 @@ if ($product) {
             SELECT
                 r.Rating,
                 r.Comment,
-                r.CreatedAt,
+                r.CreatedDate,
                 u.Email AS DisplayName
             FROM Review r
             LEFT JOIN User_Account u ON r.UserID = u.UserID
-            WHERE r.ProductID = :id
-            ORDER BY r.CreatedAt DESC
+            WHERE r.ProductID = :productId
+            ORDER BY r.CreatedDate DESC
             LIMIT 20
         ";
+
         $reviewStmt = $pdo->prepare($reviewSql);
-        $reviewStmt->execute([':productId' => $product['ProductID'],
-]);
+        $reviewStmt->execute([':productId' => $product['ProductID']]);
+
         $reviews = $reviewStmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {}
 }
+
+$currentPage = 'shop.php';
+if (!function_exists('nav_active')) {
+    function nav_active(string $page, string $currentPage): string {
+        return $page === $currentPage ? 'nav-active' : '';
+    }
+}
 ?>
+
+
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -208,15 +270,23 @@ if ($product) {
 <header class="account-header site-header">
     <div class="container header-inner">
         <div class="header-left">
-            <a href="index.php" class="logo-link">
-                <span class="account-logo">Moonlit</span>
+            <a href="index.php" class="logo-link header-logo">
+                <img src="img/image.png" alt="Moonlit logo" class="logo-img">
             </a>
 
             <nav class="header-menu">
-                <a href="index.php" class="header-menu-link">Trang chủ</a>
-                <a href="shop.php" class="header-menu-link nav-active">Cửa hàng</a>
-                <a href="aboutus.php" class="header-menu-link">Về chúng tôi</a>
-                <a href="return-policy.php" class="header-menu-link">Chính sách</a>
+                <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
+                    Trang chủ
+                </a>
+                <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
+                    Cửa hàng
+                </a>
+                <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
+                    Về chúng tôi
+                </a>
+                <a href="return-policy.php" class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
+                    Chính sách
+                </a>
             </nav>
         </div>
 
@@ -228,8 +298,8 @@ if ($product) {
 
             <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
 
-            <div class="header-account">
-                <?php if ($isLoggedIn): ?>
+            <?php if ($isLoggedIn): ?>
+                <div class="header-account">
                     <span class="account-username">
                         Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
                     </span>
@@ -237,14 +307,14 @@ if ($product) {
                         <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
                         <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
                     </div>
-                <?php else: ?>
-                    <a href="auth-login.php" class="account-btn-secondary header-account-btn">Đăng nhập</a>
-                    <a href="auth-register.php" class="account-btn-secondary header-account-btn">Đăng ký</a>
-                <?php endif; ?>
-            </div>
+                </div>
+            <?php else: ?>
+                <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+            <?php endif; ?>
         </div>
     </div>
 </header>
+
 
 <main class="account-main">
     <div class="container">
@@ -304,19 +374,26 @@ if ($product) {
                         <?php endif; ?>
 
                         <div class="mb-3">
-                            <?php if (!empty($product['DiscountPrice'])): ?>
-                                <span class="cart-price-current" style="font-size: 22px;">
-                                    <?php echo number_format($product['DiscountPrice'], 0, ',', '.'); ?> đ
-                                </span>
-                                <span class="cart-price-old" style="font-size: 16px; margin-left: 8px;">
-                                    <?php echo number_format($product['Price'], 0, ',', '.'); ?> đ
-                                </span>
+                            <?php if ($selectedSku): ?>
+                                <?php if ((float)$selectedSku['FinalPrice'] < (float)$selectedSku['OriginalPrice']): ?>
+                                    <span class="cart-price-current" style="font-size: 22px;">
+                                        <?php echo number_format((float)$selectedSku['FinalPrice'], 0, ',', '.'); ?> đ
+                                    </span>
+                                    <span class="cart-price-old" style="font-size: 16px; margin-left: 8px;">
+                                        <?php echo number_format((float)$selectedSku['OriginalPrice'], 0, ',', '.'); ?> đ
+                                    </span>
+                                <?php else: ?>
+                                    <span class="cart-price-current" style="font-size: 22px;">
+                                        <?php echo number_format((float)$selectedSku['FinalPrice'], 0, ',', '.'); ?> đ
+                                    </span>
+                                <?php endif; ?>
                             <?php else: ?>
-                                <span class="cart-price-current" style="font-size: 22px;">
-                                    <?php echo number_format($product['Price'], 0, ',', '.'); ?> đ
+                                <span class="cart-price-current" style="font-size: 14px; color: var(--color-secondary);">
+                                    Sản phẩm chưa có phiên bản (SKU).
                                 </span>
                             <?php endif; ?>
                         </div>
+
 
                         <div class="product-description-box">
                             <?php if (!empty($product['Description'])): ?>
@@ -328,8 +405,26 @@ if ($product) {
                             <?php endif; ?>
                         </div>
 
+                        <?php if (!empty($variants)): ?>
+                            <div id="variants" class="mb-2">
+                                <label class="account-label mb-1">Chọn phiên bản</label>
+                                <select class="account-input" onchange="location.href='product-detail.php?id=<?php echo urlencode($product['ProductID']); ?>&sku=' + encodeURIComponent(this.value)">
+                                    <?php foreach ($variants as $v): ?>
+                                        <option value="<?php echo htmlspecialchars($v['SKUID']); ?>"
+                                            <?php echo ($selectedSku && $selectedSku['SKUID'] === $v['SKUID']) ? 'selected' : ''; ?>>
+                                            <?php
+                                                $label = ($v['Format'] ?: 'Phiên bản') . ' — ' . number_format((float)$v['FinalPrice'], 0, ',', '.') . 'đ';
+                                                echo htmlspecialchars($label);
+                                            ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        <?php endif; ?>
+
+
                         <form action="cart-add.php" method="GET" class="d-flex flex-wrap align-items-end gap-3 mt-3">
-                            <input type="hidden" name="id" value="<?php echo htmlspecialchars($product['ProductID']); ?>">
+                                <input type="hidden" name="skuid" value="<?php echo htmlspecialchars($selectedSku['SKUID'] ?? ''); ?>">
 
                             <div>
                                 <label for="qty" class="account-label mb-1">Số lượng</label>
@@ -410,7 +505,7 @@ if ($product) {
                                     </strong>
                                     <span class="small text-secondary">
                                         <?php
-                                        if (!empty($rev['CreatedAt'])) echo date('d/m/Y', strtotime($rev['CreatedAt']));
+                                            if (!empty($rev['CreatedDate'])) echo date('d/m/Y', strtotime($rev['CreatedDate']));
                                         ?>
                                     </span>
                                 </div>
@@ -461,7 +556,7 @@ if ($product) {
 
                                     <p class="fw-bold mb-2" style="color: #DC3545;">
                                         <?php
-                                        $priceShow = !empty($rel['DiscountPrice']) ? $rel['DiscountPrice'] : $rel['Price'];
+                                        $priceShow = $rel['Price'];
                                         echo number_format($priceShow, 0, ',', '.'); ?> đ
                                     </p>
 
@@ -470,10 +565,11 @@ if ($product) {
                                            class="account-btn-secondary text-center text-decoration-none">
                                             Xem chi tiết
                                         </a>
-                                        <a href="cart-add.php?id=<?php echo urlencode($rel['ProductID']); ?>&qty=1"
-                                           class="account-btn-save text-center text-decoration-none">
-                                            Thêm vào giỏ
+                                        <a href="product-detail.php?id=<?php echo urlencode($rel['ProductID']); ?>#variants"
+                                        class="account-btn-save text-center text-decoration-none">
+                                            Chọn phiên bản
                                         </a>
+
                                     </div>
 
                                 </div>

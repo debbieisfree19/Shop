@@ -1,356 +1,325 @@
 <?php
 /**
- * MOONLIT STORE - CART PAGE
- * - Giỏ hàng lưu trong $_SESSION['cart'] = [productId => quantity]
- * - Yêu cầu đăng nhập để xem / thao tác giỏ
+ * MOONLIT STORE - CART PAGE (DB BASED) - HEADER MATCH product-detail.php
  */
 
 session_start();
 require_once 'db_connect.php';
 
-// Phải đăng nhập
+/* ===== AUTH ===== */
 if (!isset($_SESSION['user_id'])) {
-   header('Location: auth-login.php');
-  exit;
+    header('Location: auth-login.php');
+    exit;
 }
 
-$isLoggedIn      = true;
+$isLoggedIn      = isset($_SESSION['user_id']);
+$userId          = $_SESSION['user_id'];
 $currentUsername = $_SESSION['username'] ?? '';
 $currentPage     = 'cart.php';
 
-// Helper active nav (đã dùng bên index / shop)
+/* ===== NAV HELPER ===== */
 if (!function_exists('nav_active')) {
     function nav_active(string $page, string $currentPage): string {
         return $page === $currentPage ? 'nav-active' : '';
     }
 }
 
-// ============================
-// Xử lý session cart
-// ============================
-if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
-    $_SESSION['cart'] = [];
-}
-
-$cart = $_SESSION['cart'];
-
-// Xóa 1 sản phẩm
+/* ===== HANDLE REMOVE ITEM ===== */
 if (isset($_GET['remove'])) {
-    $removeId = $_GET['remove'];
-    if (isset($_SESSION['cart'][$removeId])) {
-        unset($_SESSION['cart'][$removeId]);
+    $stmt = $pdo->prepare("
+        DELETE ci FROM Cart_Items ci
+        JOIN Cart c ON ci.CartID = c.CartID
+        WHERE ci.CartItemID = :cid AND c.UserID = :uid
+    ");
+    $stmt->execute([
+        ':cid' => $_GET['remove'],
+        ':uid' => $userId
+    ]);
+    header('Location: cart.php');
+    exit;
+}
+
+/* ===== HANDLE CLEAR CART ===== */
+if (isset($_GET['clear']) && $_GET['clear'] == 1) {
+    $stmt = $pdo->prepare("
+        DELETE ci FROM Cart_Items ci
+        JOIN Cart c ON ci.CartID = c.CartID
+        WHERE c.UserID = :uid
+    ");
+    $stmt->execute([':uid' => $userId]);
+    header('Location: cart.php');
+    exit;
+}
+
+/* ===== HANDLE UPDATE QTY ===== */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qty'])) {
+    foreach ($_POST['qty'] as $cartItemId => $qty) {
+        $qty = max(1, (int)$qty);
+
+        // Lưu ý: TotalPrice = Quantity * DiscountedPrice (theo schema hiện tại)
+        $pdo->prepare("
+            UPDATE Cart_Items
+            SET Quantity = :q,
+                TotalPrice = :q * DiscountedPrice
+            WHERE CartItemID = :cid
+        ")->execute([
+            ':q'   => $qty,
+            ':cid' => $cartItemId
+        ]);
     }
     header('Location: cart.php');
     exit;
 }
 
-// Xóa hết giỏ
-if (isset($_GET['clear']) && $_GET['clear'] === '1') {
-    $_SESSION['cart'] = [];
-    header('Location: cart.php');
-    exit;
-}
+/* ===== LOAD CART ITEMS ===== */
+$sql = "
+    SELECT
+        ci.CartItemID,
+        ci.Quantity,
+        ci.DiscountedPrice,
+        ci.TotalPrice,
 
-// Cập nhật số lượng
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qty']) && is_array($_POST['qty'])) {
-    foreach ($_POST['qty'] as $productId => $qty) {
-        $qty = (int)$qty;
-        if ($qty <= 0) {
-            unset($_SESSION['cart'][$productId]);
-        } else {
-            $_SESSION['cart'][$productId] = $qty;
-        }
-    }
-    header('Location: cart.php');
-    exit;
-}
+        s.Format,
 
-$cart = $_SESSION['cart'] ?? [];
+        p.ProductName,
+        (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage,
+        p.ProductID
+    FROM Cart c
+    JOIN Cart_Items ci ON c.CartID = ci.CartID
+    JOIN SKU s ON ci.SKU_ID = s.SKUID
+    JOIN Product p ON s.ProductID = p.ProductID
+    WHERE c.UserID = :uid
+    ORDER BY ci.CartItemID DESC
+";
+$stmt = $pdo->prepare($sql);
+$stmt->execute([':uid' => $userId]);
+$items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// ============================
-// Lấy thông tin sản phẩm trong giỏ
-// ============================
-$products   = [];
-$error_msg  = '';
+/* ===== TOTAL ===== */
 $cartTotal  = 0;
 $totalItems = 0;
-
-if (!empty($cart)) {
-    try {
-        $ids = array_keys($cart);
-        // Chuẩn bị chuỗi placeholder ?,?,?
-        $placeholders = implode(',', array_fill(0, count($ids), '?'));
-
-        $sql = "
-            SELECT
-                ProductID,
-                ProductName,
-                Price,
-                DiscountPrice,
-                Image
-            FROM Product
-            WHERE ProductID IN ($placeholders)
-        ";
-
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($ids);
-        $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // Tính tổng
-        foreach ($products as &$p) {
-            $id       = $p['ProductID'];
-            $qty      = $cart[$id] ?? 0;
-            $unit     = $p['DiscountPrice'] ?? $p['Price'];
-            $lineTotal = $unit * $qty;
-
-            $p['quantity']   = $qty;
-            $p['unit_price'] = $unit;
-            $p['line_total'] = $lineTotal;
-
-            $cartTotal  += $lineTotal;
-            $totalItems += $qty;
-        }
-        unset($p);
-    } catch (Exception $e) {
-        $error_msg = 'Không thể tải giỏ hàng: ' . $e->getMessage();
-    }
+foreach ($items as $i) {
+    $cartTotal  += (float)$i['TotalPrice'];
+    $totalItems += (int)$i['Quantity'];
 }
 ?>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <title>Giỏ hàng - Moonlit Store</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
+  <meta charset="UTF-8">
+  <title>Giỏ hàng - Moonlit Store</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="moonlit-style.css">
 </head>
+
 <body class="account-body">
 
-    <!-- ===================== HEADER ===================== -->
-    <header class="account-header site-header">
-        <div class="container header-inner">
-            <!-- Logo + Menu -->
-            <div class="header-left">
-                <a href="index.php" class="logo-link">
-                    <span class="account-logo">Moonlit</span>
-                </a>
+<!-- ===================== HEADER (MATCH SHOP) ===================== -->
+<header class="account-header site-header">
+  <div class="container header-inner">
+    <div class="header-left">
+      <a href="index.php" class="logo-link header-logo">
+        <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+      </a>
 
-                <nav class="header-menu">
-                    <a
-                        href="index.php"
-                        class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>"
-                    >
-                        Trang chủ
-                    </a>
-                    <a
-                        href="shop.php"
-                        class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>"
-                    >
-                        Cửa hàng
-                    </a>
-                    <a
-                        href="aboutus.php"
-                        class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>"
-                    >
-                        Về chúng tôi
-                    </a>
-                    <a
-                        href="return-policy.php"
-                        class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>"
-                    >
-                        Chính sách
-                    </a>
-                </nav>
-            </div>
+      <nav class="header-menu">
+        <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
+          Trang chủ
+        </a>
+        <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
+          Cửa hàng
+        </a>
+        <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
+          Về chúng tôi
+        </a>
+        <a href="return-policy.php" class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
+          Chính sách
+        </a>
+      </nav>
+    </div>
 
-            <!-- Search + Cart + Account -->
-            <div class="header-right">
-                <form method="GET" action="shop.php" class="header-search-form">
-                    <input
-                        type="text"
-                        name="q"
-                        class="account-input header-search-input"
-                        placeholder="Tìm sách..."
-                    >
-                    <button type="submit" class="account-btn-save header-search-btn">
-                        Tìm
-                    </button>
-                </form>
+    <div class="header-right">
+      <form method="GET" action="shop.php" class="header-search-form">
+        <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
+        <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
+      </form>
 
-                <a href="cart.php" class="account-btn-secondary header-cart-btn">
-                    Giỏ hàng
-                </a>
+      <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
 
-                <div class="header-account">
-                    <!--<span class="account-username">
-                        Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                    </span> -->
-                    <div class="header-account-actions">
-                        <a href="account-index.php" class="account-btn-secondary header-account-btn">
-                            Tài khoản
-                        </a>
-                        <a href="logout.php" class="account-btn-secondary header-account-btn">
-                            Đăng xuất
-                        </a>
-                    </div>
-                </div>
-            </div>
+      <?php if ($isLoggedIn): ?>
+        <div class="header-account">
+          <span class="account-username">
+            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+          </span>
+          <div class="header-account-actions">
+            <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+            <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
+          </div>
         </div>
-    </header>
+      <?php else: ?>
+        <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+      <?php endif; ?>
+    </div>
+  </div>
+</header>
 
-    <!-- ===================== MAIN ===================== -->
-    <main class="account-main cart-main">
-        <div class="container">
+<!-- ===================== MAIN (SHOP-LIKE) ===================== -->
+<main class="account-main cart-main">
+  <div class="container">
 
-            <section class="cart-header">
-                <h1 class="account-section-title">Giỏ hàng của bạn</h1>
-                <p class="account-section-subtitle">
-                    Xem lại những cuốn sách bạn đã chọn trước khi thanh toán ✨
-                </p>
-            </section>
+    <!-- Header section giống shop.php -->
+    <section class="shop-header cart-header">
+      <h1 class="account-section-title">Giỏ hàng Moonlit</h1>
+      <p class="account-section-subtitle">
+        Kiểm tra lại món bạn chọn rồi “chốt đơn” nha ✨
+      </p>
+    </section>
 
-            <?php if (!empty($error_msg)): ?>
-                <div class="account-alert account-alert-error">
-                    <?php echo htmlspecialchars($error_msg); ?>
-                </div>
-            <?php endif; ?>
+    <?php if (empty($items)): ?>
+      <!-- Empty state giống shop -->
+      <section class="shop-products">
+        <div class="shop-grid">
+          <div class="shop-grid-empty">
+            <div class="account-empty-state">
+              <p class="account-empty-text">
+                Giỏ hàng của bạn đang trống. Ghé Cửa hàng chọn vài cuốn xinh xinh nè!
+              </p>
+              <div style="margin-top: 12px;">
+                <a href="shop.php" class="account-btn-save">Tiếp tục mua sắm</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-            <?php if (empty($cart) || empty($products)): ?>
-                <div class="account-card cart-empty-card">
-                    <p class="account-empty-text">
-                        Giỏ hàng của bạn đang trống. Bắt đầu khám phá sách tại
-                        <a href="shop.php" class="auth-link">Cửa hàng Moonlit</a> nhé!
-                    </p>
-                </div>
-            <?php else: ?>
-                <div class="cart-layout">
-                    <!-- Danh sách sản phẩm -->
-                    <section class="cart-items">
-                        <form method="POST">
-                            <div class="account-card cart-items-card">
+    <?php else: ?>
 
-                                <div class="cart-table-header">
-                                    <span>Sản phẩm</span>
-                                    <span>Giá</span>
-                                    <span>Số lượng</span>
-                                    <span>Thành tiền</span>
-                                    <span></span>
-                                </div>
+      <form method="POST">
+        <div class="cart-layout">
 
-                                <div class="cart-list">
-                                    <?php foreach ($products as $product): ?>
-                                        <div class="cart-item">
-                                            <!-- Ảnh + tên -->
-                                            <div class="cart-item-info">
-                                                <div class="cart-item-image">
-                                                    <?php if (!empty($product['Image'])): ?>
-                                                        <img
-                                                            src="<?php echo htmlspecialchars($product['Image']); ?>"
-                                                            alt="<?php echo htmlspecialchars($product['ProductName']); ?>"
-                                                        >
-                                                    <?php else: ?>
-                                                        <span class="shop-product-image-placeholder">Moonlit</span>
-                                                    <?php endif; ?>
-                                                </div>
-                                                <div class="cart-item-text">
-                                                    <p class="cart-item-title">
-                                                        <?php echo htmlspecialchars($product['ProductName']); ?>
-                                                    </p>
-                                                </div>
-                                            </div>
+          <!-- LEFT: items -->
+          <section class="cart-items">
+            <div class="account-card cart-items-card">
 
-                                            <!-- Giá -->
-                                            <div class="cart-item-price">
-                                                <?php if (!empty($product['DiscountPrice'])): ?>
-                                                    <span class="cart-price-current">
-                                                        <?php echo number_format($product['DiscountPrice'], 0, ',', '.'); ?> đ
-                                                    </span>
-                                                    <span class="cart-price-old">
-                                                        <?php echo number_format($product['Price'], 0, ',', '.'); ?> đ
-                                                    </span>
-                                                <?php else: ?>
-                                                    <span class="cart-price-current">
-                                                        <?php echo number_format($product['Price'], 0, ',', '.'); ?> đ
-                                                    </span>
-                                                <?php endif; ?>
-                                            </div>
+              <!-- Header table (mày có CSS sẵn) -->
+              <div class="cart-table-header">
+                <div>Sản phẩm</div>
+                <div>Đơn giá</div>
+                <div>Số lượng</div>
+                <div>Thành tiền</div>
+                <div></div>
+              </div>
 
-                                            <!-- Số lượng -->
-                                            <div class="cart-item-qty">
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    name="qty[<?php echo $product['ProductID']; ?>]"
-                                                    class="account-input cart-qty-input"
-                                                    value="<?php echo (int)$product['quantity']; ?>"
-                                                >
-                                            </div>
+              <div class="cart-list">
+                <?php foreach ($items as $item): ?>
+                  <div class="cart-item">
+                    <div class="cart-item-info">
+                      <div class="cart-item-image">
+                        <?php if (!empty($item['HasImage'])): ?>
+                          <img src="product-image.php?id=<?php echo urlencode($item['ProductID']); ?>" alt="">
+                        <?php else: ?>
+                          <span class="shop-product-image-placeholder">Moonlit</span>
+                        <?php endif; ?>
+                      </div>
 
-                                            <!-- Thành tiền -->
-                                            <div class="cart-item-total">
-                                                <?php echo number_format($product['line_total'], 0, ',', '.'); ?> đ
-                                            </div>
-
-                                            <!-- Xóa -->
-                                            <div class="cart-item-remove">
-                                                <a
-                                                    href="cart.php?remove=<?php echo urlencode($product['ProductID']); ?>"
-                                                    class="cart-remove-link"
-                                                >
-                                                    Xóa
-                                                </a>
-                                            </div>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-
-                                <div class="cart-actions-row">
-                                    <button type="submit" class="account-btn-secondary cart-update-btn">
-                                        Cập nhật giỏ hàng
-                                    </button>
-                                    <a href="cart.php?clear=1" class="cart-clear-link">
-                                        Xóa hết giỏ hàng
-                                    </a>
-                                </div>
-
-                            </div>
-                        </form>
-                    </section>
-
-                    <!-- Tổng kết -->
-                    <aside class="cart-summary">
-                        <div class="account-card cart-summary-card">
-                            <h2 class="cart-summary-title">Tóm tắt đơn hàng</h2>
-                            <div class="cart-summary-row">
-                                <span>Số lượng sản phẩm</span>
-                                <span><?php echo (int)$totalItems; ?></span>
-                            </div>
-                            <div class="cart-summary-row cart-summary-total">
-                                <span>Tổng cộng</span>
-                                <span><?php echo number_format($cartTotal, 0, ',', '.'); ?> đ</span>
-                            </div>
-
-                            <a
-                                href="checkout.php"
-                                class="account-btn-save cart-checkout-btn"
-                            >
-                                Tiến hành thanh toán
-                            </a>
-
-                            <p class="cart-note">
-                                * Trang thanh toán (checkout.php) bà tự custom sau hoặc dùng làm trang xác nhận đơn ✨
-                            </p>
+                      <div>
+                        <div class="cart-item-title">
+                          <?php echo htmlspecialchars($item['ProductName']); ?>
                         </div>
-                    </aside>
-                </div>
-            <?php endif; ?>
-        </div>
-    </main>
+                        <div class="cart-item-sku">
+                          <?php echo htmlspecialchars($item['Format']); ?>
+                        </div>
+                      </div>
+                    </div>
 
-    <!-- ===================== FOOTER ===================== -->
-    <footer class="site-footer">
-        © 2025 Moonlit — All rights reserved.
-    </footer>
+                    <div class="cart-item-price">
+                      <span class="cart-price-current">
+                        <?php echo number_format((float)$item['DiscountedPrice'], 0, ',', '.'); ?> đ
+                      </span>
+                    </div>
+
+                    <div class="cart-item-qty">
+                      <input
+                        type="number"
+                        name="qty[<?php echo (int)$item['CartItemID']; ?>]"
+                        value="<?php echo (int)$item['Quantity']; ?>"
+                        min="1"
+                        class="account-input cart-qty-input"
+                      >
+                    </div>
+
+                    <div class="cart-item-total">
+                      <?php echo number_format((float)$item['TotalPrice'], 0, ',', '.'); ?> đ
+                    </div>
+
+                    <div class="cart-item-remove">
+                      <a href="cart.php?remove=<?php echo (int)$item['CartItemID']; ?>"
+                         class="cart-remove-link"
+                         onclick="return confirm('Xóa sản phẩm này khỏi giỏ hàng nha?');">
+                        Xóa
+                      </a>
+                    </div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+
+              <!-- actions row giống style tổng -->
+              <div class="cart-actions-row">
+                <button type="submit" class="account-btn-secondary cart-update-btn">
+                  Cập nhật giỏ hàng
+                </button>
+
+                <a href="cart.php?clear=1" class="cart-clear-link"
+                   onclick="return confirm('Xóa toàn bộ giỏ hàng luôn hả?');">
+                  Xóa hết
+                </a>
+              </div>
+
+            </div>
+          </section>
+
+          <!-- RIGHT: summary -->
+          <aside class="cart-summary">
+            <div class="account-card cart-summary-card">
+              <h3 class="cart-summary-title">Tóm tắt</h3>
+
+              <div class="cart-summary-row">
+                <span>Số lượng</span>
+                <span><?php echo (int)$totalItems; ?></span>
+              </div>
+
+              <div class="cart-summary-row cart-summary-total">
+                <span>Tổng</span>
+                <span><?php echo number_format((float)$cartTotal, 0, ',', '.'); ?> đ</span>
+              </div>
+
+              <a href="checkout.php" class="account-btn-save">Thanh toán</a>
+
+              <p class="cart-note">
+                * Phí ship và ưu đãi sẽ được tính ở bước thanh toán.
+              </p>
+
+              <div style="margin-top: 10px;">
+                <a href="shop.php" class="account-btn-secondary" style="width:100%; display:inline-block; text-align:center;">
+                  Tiếp tục mua sắm
+                </a>
+              </div>
+            </div>
+          </aside>
+
+        </div>
+      </form>
+
+    <?php endif; ?>
+  </div>
+</main>
+
+<footer class="site-footer">
+  © <?php echo date('Y'); ?> Moonlit Store. All rights reserved.
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
 </html>
+
