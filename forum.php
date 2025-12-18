@@ -5,76 +5,73 @@ require_once 'db_connect.php';
 /* =====================
    AUTH / COMMON
 ===================== */
-$isLoggedIn       = isset($_SESSION['user_id']);
-$currentUserID    = $_SESSION['user_id'] ?? null;
-$currentUsername  = $_SESSION['username'] ?? '';
-$currentPage      = basename($_SERVER['PHP_SELF']);
+$isLoggedIn      = isset($_SESSION['user_id']) && $_SESSION['user_id'] !== '';
+$currentUserID   = $_SESSION['user_id'] ?? null;
+$currentUsername = $_SESSION['username'] ?? '';
+$currentPage     = basename($_SERVER['PHP_SELF']);
 
-if (!function_exists('nav_active')) {
-    function nav_active(string $page, string $currentPage): string {
-        return $page === $currentPage ? 'nav-active' : '';
-    }
+function nav_active(string $page, string $currentPage): string {
+    return $page === $currentPage ? 'nav-active' : '';
 }
 
 $action = $_GET['action'] ?? 'list';
 
 /* =====================
-   HANDLE POST ACTION
+   HANDLE POST
 ===================== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $isLoggedIn) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    /* ===== CREATE TOPIC ===== */
+    if (!$isLoggedIn) {
+        header("Location: auth-login.php");
+        exit;
+    }
+
+    /* ===== CREATE TOPIC + FIRST POST ===== */
     if ($_POST['action'] === 'create_topic') {
-
-        do {
-            $topicID = 'T' . str_pad(rand(0, 99999), 5, '0', STR_PAD_LEFT);
-            $stmt = $pdo->prepare("SELECT 1 FROM Forum_Topic WHERE TopicID = ?");
-            $stmt->execute([$topicID]);
-        } while ($stmt->fetch());
-
-        do {
-            $postID = 'P' . str_pad(rand(0, 99999), 5, '0', STR_PAD_LEFT);
-            $stmt = $pdo->prepare("SELECT 1 FROM Forum_Post WHERE PostID = ?");
-            $stmt->execute([$postID]);
-        } while ($stmt->fetch());
 
         $title   = trim($_POST['title']);
         $content = trim($_POST['content']);
 
-        if ($title && $content) {
-            $pdo->beginTransaction();
-
-            // tạo topic
-            $stmt = $pdo->prepare("
-                INSERT INTO Forum_Topic
-                (TopicID, UserID, Title, Description, CreatedBy, CreatedDate, IsLocked)
-                VALUES (?, ?, ?, ?, ?, NOW(), 0)
-            ");
-            $stmt->execute([
-                $topicID,
-                $currentUserID,
-                $title,
-                $content,
-                $currentUserID
-            ]);
-
-            // tạo post đầu tiên
-            $stmt = $pdo->prepare("
-                INSERT INTO Forum_Post
-                (PostID, TopicID, UserID, Content, CreatedDate)
-                VALUES (?, ?, ?, ?, NOW())
-            ");
-            $stmt->execute([
-                $postID,
-                $topicID,
-                $currentUserID,
-                $content
-            ]);
-
-            $pdo->commit();
+        if ($title === '' || $content === '') {
+            header("Location: forum.php");
+            exit;
         }
 
-        header("Location: forum.php");
+        // Tạo Topic
+        $stmt = $pdo->prepare("
+            INSERT INTO Forum_Topic
+            (UserID, Title, Description, CreatedBy, CreatedDate, IsLocked)
+            VALUES (?, ?, ?, ?, NOW(), 0)
+        ");
+        $stmt->execute([
+            $currentUserID,
+            $title,
+            $content,
+            $currentUserID
+        ]);
+
+        $topicID = $pdo->lastInsertId(); // Lấy ID INT
+
+        // Tạo Post đầu tiên
+        do {
+            $postID = 'P' . str_pad(rand(0, 99999), 5, '0', STR_PAD_LEFT);
+            $check = $pdo->prepare("SELECT 1 FROM Forum_Post WHERE PostID=?");
+            $check->execute([$postID]);
+        } while ($check->fetch());
+
+        $stmt = $pdo->prepare("
+            INSERT INTO Forum_Post
+            (PostID, TopicID, UserID, Content, CreatedDate)
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([
+            $postID,
+            $topicID,
+            $currentUserID,
+            $content
+        ]);
+
+        header("Location: forum.php?");
         exit;
     }
 
@@ -248,6 +245,7 @@ $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $topics = $stmt->fetchAll();
 ?>
+
 
 <!DOCTYPE html>
 <html lang="vi">
