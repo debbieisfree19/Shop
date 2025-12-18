@@ -217,6 +217,7 @@ if ($selectedBlogID) {
 <?php if($selectedBlog): ?>
 <section class="blog-section blog-detail">
 <h2><?= htmlspecialchars($selectedBlog['Title']) ?></h2>
+<br>
 <img src="img/blogs/<?= htmlspecialchars($selectedBlog['Thumbnail']) ?>">
 <div class="blog-detail-content">
 <?= nl2br($selectedBlog['Content']) ?>
