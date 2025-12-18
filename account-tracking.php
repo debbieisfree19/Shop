@@ -139,7 +139,7 @@ $status_config = [
 ];
 ?>
 
-<div class="account-section">
+<div class="account-section" data-page-id="tracking-page">
     <h2 class="account-section-title">Theo dõi đơn hàng</h2>
 
     <?php if (empty($grouped_orders)): ?>
@@ -400,22 +400,4 @@ $status_config = [
         </form>
     </div>
 </div>
-
-<script>
-    function openCancelModal(orderId) {
-        document.getElementById('modal_order_id').value = orderId;
-        document.getElementById('cancelOrderModal').style.display = 'flex';
-    }
-
-    function closeCancelModal() {
-        document.getElementById('cancelOrderModal').style.display = 'none';
-    }
-
-    // Đóng modal khi click ra ngoài
-    window.onclick = function(event) {
-        var modal = document.getElementById('cancelOrderModal');
-        if (event.target == modal) {
-            modal.style.display = "none";
-        }
-    }
-</script>
+<script src="moonlit.js"></script>
