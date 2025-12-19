@@ -4,7 +4,7 @@
  * - Load cart từ DB: Cart + Cart_Items
  * - Chọn Carrier (CarrierID) -> cộng ShippingPrice
  * - Áp voucher bằng Code (bảng Voucher)
- * - Demo: chưa lưu Order/Order_Items, chỉ clear Cart_Items khi submit OK
+ * - Lưu Order/Order_Items/Shipping_Order/User_Voucher thật khi đặt hàng
  */
 
 session_start();
@@ -84,7 +84,6 @@ try {
     ");
     $carriers = $cStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    // không chặn checkout, chỉ fallback
     $carriers = [];
 }
 
@@ -102,6 +101,10 @@ function now_in_range(?string $start, ?string $end): bool {
         if ($e !== false && $now > $e) return false;
     }
     return true;
+}
+
+function gen_id6(): string {
+    return strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
 }
 
 /* =========================
@@ -125,7 +128,6 @@ if ($selectedCarrierId !== '' && !empty($carriers)) {
         }
     }
 }
-// nếu chưa chọn, default carrier rẻ nhất (nếu có)
 if (!$selectedCarrier && !empty($carriers)) {
     $selectedCarrier = $carriers[0];
     $selectedCarrierId = $carriers[0]['CarrierID'];
@@ -170,19 +172,15 @@ if ($voucherCodeInput !== '' && $subTotal > 0) {
             $value = (float)($voucher['DiscountValue'] ?? 0);
 
             if ($type === 'percent' || $type === 'percentage') {
-                // ví dụ DiscountValue = 10 => 10%
                 $discountAmount = $subTotal * ($value / 100.0);
             } else {
-                // mặc định là fixed
                 $discountAmount = $value;
             }
 
-            // cap theo MaxDiscount
             if ($voucher['MaxDiscount'] !== null && (float)$voucher['MaxDiscount'] > 0) {
                 $discountAmount = min($discountAmount, (float)$voucher['MaxDiscount']);
             }
 
-            // không được vượt quá subtotal
             $discountAmount = max(0, min($discountAmount, $subTotal));
         }
     } catch (Exception $e) {
@@ -194,7 +192,7 @@ $totalAfterVoucher = max(0, $subTotal - $discountAmount);
 $grandTotal = $totalAfterVoucher + $shippingFee;
 
 /* =========================
-   SUBMIT ORDER (DEMO)
+   SUBMIT ORDER (SAVE REAL)
 ========================= */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     $full_name = trim($_POST['full_name'] ?? '');
@@ -210,21 +208,132 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     if (empty($products))  $form_errors[] = 'Giỏ hàng trống, không thể đặt hàng.';
     if (!$selectedCarrierId) $form_errors[] = 'Vui lòng chọn đơn vị vận chuyển.';
 
-    // nếu user nhập voucher nhưng voucherError có -> coi như lỗi form (tuỳ bà muốn cho đặt luôn)
     if ($voucherCodeInput !== '' && $voucherError !== '') {
         $form_errors[] = $voucherError;
     }
 
     if (empty($form_errors)) {
         try {
-            // DEMO: clear cart items in DB
+            $pdo->beginTransaction();
+
+            // 0) re-check cart still exists (chống bấm 2 lần / tab khác xóa)
+            $cartCheck = $pdo->prepare("
+                SELECT COUNT(*) 
+                FROM Cart c 
+                JOIN Cart_Items ci ON c.CartID = ci.CartID
+                WHERE c.UserID = :uid
+            ");
+            $cartCheck->execute([':uid' => $userId]);
+            $cartCount = (int)$cartCheck->fetchColumn();
+            if ($cartCount <= 0) {
+                throw new Exception('Giỏ hàng đã trống (có thể bạn vừa đặt ở tab khác).');
+            }
+
+            // 1) insert Order
+            $orderId = gen_id6();
+
+            // Bảng Order bắt buộc các field shipping -> tạm nhét address vào ShippingStreet
+            $shippingCity     = '';
+            $shippingDistrict = '';
+            $shippingWard     = '';
+            $shippingStreet   = $address;
+            $shippingNumber   = '';
+
+            $insOrder = $pdo->prepare("
+                INSERT INTO `Order` (
+                    OrderID, UserID,
+                    TotalAmount, TotalAmountAfterVoucher,
+                    Status, PaymentMethod,
+                    ShippingCity, ShippingDistrict, ShippingWard, ShippingStreet, ShippingNumber,
+                    CreatedDate, DateReceived, Note
+                ) VALUES (
+                    :oid, :uid,
+                    :total, :afterVoucher,
+                    :status, :pay,
+                    :city, :district, :ward, :street, :num,
+                    NOW(), NULL, :note
+                )
+            ");
+            $insOrder->execute([
+                ':oid'          => $orderId,
+                ':uid'          => $userId,
+                ':total'        => $subTotal,
+                ':afterVoucher' => $totalAfterVoucher,
+                ':status'       => 'Pending',
+                ':pay'          => $payment,
+                ':city'         => $shippingCity,
+                ':district'     => $shippingDistrict,
+                ':ward'         => $shippingWard,
+                ':street'       => $shippingStreet,
+                ':num'          => $shippingNumber,
+                ':note'         => $note,
+            ]);
+
+            // 2) insert Order_Items (copy từ cart)
+            $insItem = $pdo->prepare("
+                INSERT INTO Order_Items (OrderID, SKU_ID, Quantity, UnitPrice, DiscountedPrice, TotalPrice)
+                VALUES (:oid, :skuid, :qty, :u, :d, :t)
+            ");
+
+            foreach ($products as $p) {
+                $insItem->execute([
+                    ':oid'   => $orderId,
+                    ':skuid' => $p['SKUID'],
+                    ':qty'   => (int)$p['Quantity'],
+                    ':u'     => (float)$p['UnitPrice'],
+                    ':d'     => (float)$p['DiscountedPrice'],
+                    ':t'     => (float)$p['TotalPrice'],
+                ]);
+            }
+
+            // 3) insert Shipping_Order (gắn Carrier)
+            $shippingId = gen_id6();
+            $insShip = $pdo->prepare("
+                INSERT INTO Shipping_Order (
+                    ShippingID, OrderID, ReturnID, CarrierID,
+                    TrackingNumber, Status, ShippedDate, DeliveredDate
+                ) VALUES (
+                    :sid, :oid, NULL, :cid,
+                    NULL, :status, NULL, NULL
+                )
+            ");
+            $insShip->execute([
+                ':sid'    => $shippingId,
+                ':oid'    => $orderId,
+                ':cid'    => $selectedCarrierId,
+                ':status' => 'Pending'
+            ]);
+
+            // 4) nếu có voucher hợp lệ -> lưu User_Voucher + tăng UsedCount
+            if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
+                $uvId = gen_id6();
+                $pdo->prepare("
+                    INSERT INTO User_Voucher (ID, UserID, VoucherID, OrderID, DateReceived)
+                    VALUES (:id, :uid, :vid, :oid, NOW())
+                ")->execute([
+                    ':id'  => $uvId,
+                    ':uid' => $userId,
+                    ':vid' => $voucher['VoucherID'],
+                    ':oid' => $orderId
+                ]);
+
+                $pdo->prepare("
+                    UPDATE Voucher
+                    SET UsedCount = IFNULL(UsedCount, 0) + 1
+                    WHERE VoucherID = :vid
+                ")->execute([':vid' => $voucher['VoucherID']]);
+            }
+
+            // 5) clear cart items
             $pdo->prepare("
                 DELETE ci FROM Cart_Items ci
                 JOIN Cart c ON ci.CartID = c.CartID
                 WHERE c.UserID = :uid
             ")->execute([':uid' => $userId]);
 
-            $success_msg = 'Đặt hàng thành công (demo). Tụi mình sẽ liên hệ xác nhận đơn trong thời gian sớm nhất ✨';
+            $pdo->commit();
+
+            $success_msg = "Đặt hàng thành công! Mã đơn: <strong>" . htmlspecialchars($orderId) . "</strong> ✨";
 
             // reset view
             $products = [];
@@ -238,6 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
             $selectedCarrierId = '';
 
         } catch (Exception $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $form_errors[] = 'Có lỗi khi xử lý đặt hàng: ' . $e->getMessage();
         }
     }
@@ -312,7 +422,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         <?php endif; ?>
 
         <?php if (!empty($success_msg)): ?>
-            <div class="account-alert account-alert-success"><?php echo htmlspecialchars($success_msg); ?></div>
+            <div class="account-alert account-alert-success"><?php echo $success_msg; ?></div>
         <?php endif; ?>
 
         <?php if (empty($products)): ?>
@@ -376,9 +486,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                                             <?php foreach ($carriers as $c): ?>
                                                 <option value="<?php echo htmlspecialchars($c['CarrierID']); ?>"
                                                     <?php echo ($selectedCarrierId === $c['CarrierID']) ? 'selected' : ''; ?>>
-                                                    <?php
-                                                        echo htmlspecialchars($c['CarrierName']) . ' — ' . number_format((float)$c['ShippingPrice'], 0, ',', '.') . ' đ';
-                                                    ?>
+                                                    <?php echo htmlspecialchars($c['CarrierName']) . ' — ' . number_format((float)$c['ShippingPrice'], 0, ',', '.') . ' đ'; ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
@@ -478,7 +586,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                         </div>
 
                         <p class="cart-note">
-                            * Demo: chưa lưu Order/Shipping_Order. Khi bà muốn lưu thật, tui sẽ map dữ liệu vào bảng `Order`, `Order_Items`, `Shipping_Order`, `Payment`.
+                            * Đã lưu Order/Order_Items/Shipping_Order. Tổng thanh toán hiển thị gồm ship, còn bảng `Order` lưu tiền hàng (trước & sau voucher).
                         </p>
                     </div>
                 </aside>
