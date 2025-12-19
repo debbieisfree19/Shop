@@ -412,9 +412,9 @@ if (!empty($page_order_ids)) {
         <i class="fas fa-info-circle me-2"></i>
         <span>
             Hiểu rõ hơn về 
-            <a href="return-policy.php#return-policy" class="fw-bold text-decoration-none" style="color: var(--color-deep-blue);">chính sách đổi/trả</a> 
+            <a href="policy.php#return-policy" class="fw-bold text-decoration-none" style="color: var(--color-deep-blue);">chính sách đổi/trả</a> 
             và 
-            <a href="return-policy.php#refund-policy" class="fw-bold text-decoration-none" style="color: var(--color-deep-blue);">hoàn tiền</a> 
+            <a href="policy.php#refund-policy" class="fw-bold text-decoration-none" style="color: var(--color-deep-blue);">hoàn tiền</a> 
             của Moonlit.
         </span>
         <i class="fas fa-chevron-right ms-auto" style="font-size: 10px;"></i>

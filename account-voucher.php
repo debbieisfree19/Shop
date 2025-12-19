@@ -305,7 +305,7 @@ $point_history = $stmt->fetchAll();
 <div class="account-section">
     <h2 class="account-section-title">Voucher & Đổi Điểm</h2>
     <div class="mb-4">
-        <a href="return-policy.php#membership-policy" class="text-decoration-none d-inline-flex align-items-center" style="color: var(--color-deep-blue); font-size: 14px; background: #f0f4f8; padding: 10px 15px; border-radius: 8px; transition: 0.3s; width: 100%;">
+        <a href="policy.php#membership-policy" class="text-decoration-none d-inline-flex align-items-center" style="color: var(--color-deep-blue); font-size: 14px; background: #f0f4f8; padding: 10px 15px; border-radius: 8px; transition: 0.3s; width: 100%;">
             <i class="fas fa-info-circle me-2"></i>
             <span>Hiểu rõ hơn về <strong>chính sách thành viên & tích điểm</strong> của Moonlit</span>
             <i class="fas fa-chevron-right ms-2" style="font-size: 10px;"></i>
