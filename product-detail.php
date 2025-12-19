@@ -232,6 +232,27 @@ if ($product && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
                             ':createdDate' => date('Y-m-d H:i:s'),
                         ]);
 
+                        /* --- BẮT ĐẦU PHẦN CỘNG ĐIỂM THƯỞNG --- */
+                        $pointsToGive = 5; // Số điểm tặng cho mỗi đánh giá
+                        $reason = "Thưởng đánh giá sản phẩm: " . $product['ProductName'];
+
+                        // Cập nhật tổng điểm trong bảng User_Account
+                        $updatePointsSql = "UPDATE User_Account SET Points = Points + :points WHERE UserID = :userId";
+                        $pdo->prepare($updatePointsSql)->execute([
+                            ':points' => $pointsToGive,
+                            ':userId' => $currentUserId
+                        ]);
+
+                        // Lưu lịch sử cộng điểm vào bảng Point_History
+                        $historySql = "INSERT INTO Point_History (UserID, PointChange, Reason, CreatedDate) 
+                                    VALUES (:userId, :points, :reason, NOW())";
+                        $pdo->prepare($historySql)->execute([
+                            ':userId' => $currentUserId,
+                            ':points' => $pointsToGive,
+                            ':reason' => $reason
+                        ]);
+                        /* --- KẾT THÚC PHẦN CỘNG ĐIỂM THƯỞNG --- */
+
                         header('Location: product-detail.php?id=' . urlencode($product['ProductID']) . '&review=success');
                         exit;
                     }
