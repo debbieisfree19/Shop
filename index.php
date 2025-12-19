@@ -5,7 +5,7 @@ require_once 'db_connect.php';
 // Trạng thái đăng nhập
 $isLoggedIn = isset($_SESSION['user_id']);
 $currentUsername = $_SESSION['username'] ?? '';
-$currentPage = 'index.php';
+$currentPage = basename($_SERVER['PHP_SELF']);
 
 // Helper nav active
 if (!function_exists('nav_active')) {
@@ -96,34 +96,6 @@ try {
 
 
 
-// Đang khuyến mãi (4 cuốn mới nhất có sale còn hiệu lực)
-$saleProducts = [];
-try {
-    $stmt = $pdo->query("
-        SELECT
-            p.ProductID,
-            p.ProductName,
-            p.Description,
-            p.Price,
-            ps.DiscountedPrice,
-            p.CreatedDate,
-            (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
-        FROM PRODUCT_SALE ps
-        JOIN SKU s
-            ON s.SKUID = ps.SKUID
-        JOIN Product p
-            ON p.ProductID = s.ProductID
-        WHERE
-            p.Status = 1
-            AND s.Status = 1
-            AND ps.StartDate <= NOW()
-            AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
-        ORDER BY p.CreatedDate DESC
-        LIMIT 4
-    ");
-    $saleProducts = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
-}
 
 //Book of the month
 $bookOfTheMonth = null;
@@ -166,7 +138,7 @@ try {
             p.Image
 
         ORDER BY TotalSold DESC
-        LIMIT 1
+        LIMIT 3
     ");
 
     $bookOfTheMonth = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -174,6 +146,25 @@ try {
 } catch (Exception $e) {
 }
 
+// BLOG MỚI NHẤT
+
+$latestBlogs = [];
+
+try {
+    $stmt = $pdo->query("
+        SELECT
+            BlogID,
+            Title,
+            Content,
+            Thumbnail,
+            CreatedDate
+        FROM Blog
+        ORDER BY CreatedDate DESC
+        LIMIT 3
+    ");
+    $latestBlogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+}
 
 
 
@@ -197,7 +188,7 @@ try {
         <div class="container header-inner">
             <div class="header-left">
                 <a href="index.php" class="logo-link header-logo">
-                    <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+                    <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
 
                 </a>
 
@@ -207,6 +198,9 @@ try {
                     </a>
                     <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
                         Cửa hàng
+                    </a>
+                    <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">
+                        Moonlit Forum
                     </a>
                     <a href="aboutus.php"
                         class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
@@ -228,13 +222,14 @@ try {
 
                 <?php if ($isLoggedIn): ?>
                     <div class="header-account">
-                        <span class="account-username">
-                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                        </span>
                         <div class="header-account-actions">
                             <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
                             <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
                         </div>
+
+                        <span class="account-username">
+                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                        </span>
                     </div>
                 <?php else: ?>
                     <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
@@ -340,73 +335,66 @@ try {
                     <h2 class="home-section-title">📚 Book of the Month</h2>
                 </div>
 
-                <?php if ($bookOfTheMonth): ?>
+                <div class="home-grid-3">
+                    <article class="product-card">
 
-                    <!-- ===== CÓ DỮ LIỆU ===== -->
-                    <div class="featured-book-card">
-                        <div class="featured-book-image">
-                            <?php if ($bookOfTheMonth['HasImage']): ?>
-                                <img src="product-image.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>">
-                            <?php else: ?>
-                                <div class="product-image-placeholder">Moonlit</div>
-                            <?php endif; ?>
-                        </div>
+                        <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
+                            class="product-card-link">
 
-                        <div class="featured-book-info">
-                            <h3><?php echo htmlspecialchars($bookOfTheMonth['ProductName']); ?></h3>
-
-                            <p class="featured-desc">
-                                <?php echo htmlspecialchars(
-                                    mb_strimwidth($bookOfTheMonth['Description'] ?? '', 0, 150, '...')
-                                ); ?>
-                            </p>
-
-                            <div class="product-price-row">
-                                <?php if ($bookOfTheMonth['HasSale']): ?>
-                                    <span class="product-price text-danger">
-                                        <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
-                                    </span>
-                                    <span class="product-old-price">
-                                        <?php echo format_price($bookOfTheMonth['MaxOriginalPrice']); ?>
-                                    </span>
-                                    <span class="product-badge-sale">Bán chạy</span>
+                            <!-- ẢNH -->
+                            <div class="product-card-image">
+                                <?php if ($bookOfTheMonth['HasImage']): ?>
+                                    <img src="product-image.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>">
                                 <?php else: ?>
-                                    <span class="product-price">
-                                        <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
-                                    </span>
+                                    <div class="product-image-placeholder">Moonlit</div>
                                 <?php endif; ?>
                             </div>
 
-                            <p class="featured-sold">
-                                🔥 Đã bán: <?php echo (int) $bookOfTheMonth['TotalSold']; ?> cuốn
-                            </p>
+                            <!-- BODY -->
+                            <div class="product-card-body">
+                                <h3 class="product-title">
+                                    <?php echo htmlspecialchars($bookOfTheMonth['ProductName']); ?>
+                                </h3>
 
+                                <p class="product-desc">
+                                    <?php echo htmlspecialchars(
+                                        mb_strimwidth($bookOfTheMonth['Description'] ?? '', 0, 80, '...')
+                                    ); ?>
+                                </p>
+
+                                <div class="product-price-row">
+                                    <?php if ($bookOfTheMonth['HasSale']): ?>
+                                        <span class="product-price text-danger">
+                                            <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
+                                        </span>
+                                        <span class="product-old-price">
+                                            <?php echo format_price($bookOfTheMonth['MaxOriginalPrice']); ?>
+                                        </span>
+                                        <span class="product-badge-sale">Bán chạy</span>
+                                    <?php else: ?>
+                                        <span class="product-price">
+                                            <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <p class="featured-sold">
+                                    🔥 Đã bán: <?php echo (int) $bookOfTheMonth['TotalSold']; ?> cuốn
+                                </p>
+                            </div>
+                        </a>
+
+                        <!-- FOOTER -->
+                        <div class="product-card-footer">
                             <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
-                                class="account-btn-save">
+                                class="account-btn-secondary product-btn">
                                 Xem chi tiết
                             </a>
                         </div>
-                    </div>
 
-                <?php else: ?>
-
-                    <!-- ===== CHƯA CÓ DỮ LIỆU ===== -->
-                    <div class="account-empty-state featured-empty">
-                        <p class="account-empty-text">
-                            📭 Hiện chưa có sách nào đủ dữ liệu để trở thành <strong>Book of the Month</strong>.
-                        </p>
-                        <p class="account-empty-subtext">
-                            Hãy quay lại sau khi có đơn hàng đầu tiên nhé ✨
-                        </p>
-                    </div>
-
-                <?php endif; ?>
-            </div>
+                    </article>
+                </div>
         </section>
-
-
-
-
         <!-- ===== SÁCH MỚI NHẤT ===== -->
         <section class="home-section">
             <div class="container">
@@ -430,7 +418,8 @@ try {
                                     </div>
 
                                     <div class="product-card-body">
-                                        <h3 class="product-title"><?php echo htmlspecialchars($p['ProductName']); ?></h3>
+                                        <h3 class="product-title"><?php echo htmlspecialchars($p['ProductName']); ?>
+                                        </h3>
                                         <p class="product-desc">
                                             <?php echo htmlspecialchars(mb_strimwidth($p['Description'] ?? '', 0, 80, '...')); ?>
                                         </p>
@@ -479,60 +468,123 @@ try {
                 </div>
             </div>
         </section>
-
-        <!-- ===== KHUYẾN MÃI ===== -->
-        <section class="home-section home-section-alt">
+        <!-- ===== BLOG MỚI NHẤT ===== -->
+        <section class="home-section home-section-blog">
             <div class="container">
                 <div class="home-section-header">
-                    <h2 class="home-section-title">Đang khuyến mãi</h2>
-                    <a href="shop.php?sale=1" class="home-section-link">Xem tất cả ưu đãi</a>
+                    <h2 class="home-section-title">📖 Blog Moonlit</h2>
+                    <a href="blogs.php" class="home-section-link">Xem tất cả</a>
                 </div>
 
-                <div class="home-grid-4">
-                    <?php if (!empty($saleProducts)): ?>
-                        <?php foreach ($saleProducts as $p): ?>
-                            <article class="shop-product-card product-card-sale">
-                                <a href="product-detail.php?id=<?php echo $p['ProductID']; ?>" class="product-card-link">
-                                    <div class="product-card-image">
-                                        <?php if (!empty($p['HasImage'])): ?>
-                                            <img src="product-image.php?id=<?php echo $p['ProductID']; ?>"
-                                                alt="<?php echo htmlspecialchars($p['ProductName']); ?>">
-                                        <?php else: ?>
-                                            <div class="product-image-placeholder">Moonlit</div>
-                                        <?php endif; ?>
-                                        <span class="product-badge-sale">Sale</span>
-                                    </div>
+                <div class="home-grid-3">
+                    <?php if (!empty($latestBlogs)): ?>
+                        <?php foreach ($latestBlogs as $b): ?>
+                            <article class="blog-card">
+                                <a href="blogs.php?blog_id=<?php echo $b['BlogID']; ?>" class="blog-card-link">
 
-                                    <div class="product-card-body">
-                                        <h3 class="product-title"><?php echo htmlspecialchars($p['ProductName']); ?></h3>
-
-                                        <div class="product-price-row">
-                                            <span
-                                                class="product-price"><?php echo format_price($p['DiscountedPrice']); ?></span>
-                                            <span class="product-old-price"><?php echo format_price($p['Price']); ?></span>
+                                    <?php if (!empty($b['Thumbnail'])): ?>
+                                        <div class="blog-card-image">
+                                            <img src="<?php echo htmlspecialchars($b['Thumbnail']); ?>"
+                                                alt="<?php echo htmlspecialchars($b['Title']); ?>">
                                         </div>
+                                    <?php endif; ?>
 
-                                        <div class="product-meta-row">
-                                            <span class="product-tag product-tag-sale">Khuyến mãi</span>
-                                        </div>
+                                    <div class="blog-card-body">
+                                        <h3 class="blog-title">
+                                            <?php echo htmlspecialchars($b['Title']); ?>
+                                        </h3>
+
+                                        <p class="blog-excerpt">
+                                            <?php
+                                            echo htmlspecialchars(
+                                                mb_strimwidth(strip_tags($b['Content']), 0, 120, '...')
+                                            );
+                                            ?>
+                                        </p>
+
+                                        <span class="blog-date">
+                                            <?php echo date('d/m/Y', strtotime($b['CreatedDate'])); ?>
+                                        </span>
                                     </div>
                                 </a>
                             </article>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <p class="home-empty-text">Hiện chưa có chương trình khuyến mãi nào.</p>
+                        <p class="home-empty-text">Chưa có bài blog nào.</p>
                     <?php endif; ?>
                 </div>
             </div>
         </section>
+        <!-- ===== CONTACT US ===== -->
+        <section class="home-section home-section-contact">
+            <div class="container">
+                <div class="contact-cta-box">
+                    <h2>Bạn cần hỗ trợ hoặc muốn hợp tác?</h2>
+                    <p>
+                        Moonlit luôn sẵn sàng lắng nghe mọi câu hỏi, góp ý
+                        hoặc đề xuất từ bạn ✨
+                    </p>
 
-
+                    <a href="contact_us.php" class="account-btn-save">
+                        Liên hệ với chúng tôi
+                    </a>
+                </div>
+            </div>
+        </section>
 
     </main>
 
     <footer class="site-footer">
-        © 2025 Moonlit — All rights reserved.
+        <div class="container footer-grid">
+
+            <!-- COL 1 -->
+            <div class="footer-col">
+                <h4>Moonlit</h4>
+                <p class="footer-desc">
+                    Hiệu sách trực tuyến dành cho những tâm hồn yêu đọc.
+                    Chúng tôi tin mỗi cuốn sách đều có ánh trăng riêng 🌙
+                </p>
+            </div>
+
+            <!-- COL 2 -->
+            <div class="footer-col">
+                <h4>Liên kết</h4>
+                <ul>
+                    <li><a href="index.php">Trang chủ</a></li>
+                    <li><a href="shop.php">Cửa hàng</a></li>
+                    <li><a href="forum.php">Moonlit Forum</a></li>
+                    <li><a href="aboutus.php">Về chúng tôi</a></li>
+                </ul>
+            </div>
+
+            <!-- COL 3 -->
+            <div class="footer-col">
+                <h4>Blog & Nội dung</h4>
+                <ul>
+                    <li><a href="blogs.php">Blog Moonlit</a></li>
+                    <li><a href="blogs.php">Review sách</a></li>
+                    <li><a href="blogs.php">Góc đọc chậm</a></li>
+                </ul>
+            </div>
+
+            <!-- COL 4 -->
+            <div class="footer-col">
+                <h4>Chính sách</h4>
+                <ul>
+                    <li><a href="policy.php">Chính sách mua hàng</a></li>
+                    <li><a href="policy.php">Bảo mật thông tin</a></li>
+                    <li><a href="policy.php">Điều khoản sử dụng</a></li>
+                    <li><a href="contact_us.php">Liên hệ</a></li>
+                </ul>
+            </div>
+
+        </div>
+
+        <div class="footer-bottom">
+            © 2025 Moonlit — All rights reserved.
+        </div>
     </footer>
+
 
 </body>
 
