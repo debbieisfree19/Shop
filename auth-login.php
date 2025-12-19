@@ -14,7 +14,8 @@ $currentPage = 'auth-login.php'; // Đặt tên trang hiện tại để Active 
 
 // --- 2. BỔ SUNG HÀM HỖ TRỢ CHO HEADER ---
 if (!function_exists('nav_active')) {
-    function nav_active($page, $current) {
+    function nav_active($page, $current)
+    {
         return $page === $current ? 'nav-active' : '';
     }
 }
@@ -75,6 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -82,13 +84,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="moonlit-style.css">
 </head>
+
 <body class="auth-body">
-        <!-- ===================== HEADER ===================== -->
+    <!-- ===================== HEADER ===================== -->
     <header class="account-header site-header">
         <div class="container header-inner">
             <div class="header-left">
                 <a href="index.php" class="logo-link header-logo">
-                    <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+                    <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
 
                 </a>
 
@@ -122,13 +125,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <?php if ($isLoggedIn): ?>
                     <div class="header-account">
-                        <span class="account-username">
-                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                        </span>
                         <div class="header-account-actions">
                             <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
                             <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
                         </div>
+
+                        <span class="account-username">
+                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                        </span>
                     </div>
                 <?php else: ?>
                     <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
@@ -136,48 +140,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </header>
-    
+
     <main class="auth-main">
-                <div class="auth-card">
-                    <h2 class="auth-title">Đăng Nhập</h2>
+        <div class="auth-card">
+            <h2 class="auth-title">Đăng Nhập</h2>
 
-                    <?php if (!empty($error_message)): ?>
-                        <div class="alert alert-danger auth-alert" role="alert">
-                            <?php echo htmlspecialchars($error_message); ?>
-                        </div>
-                    <?php endif; ?>
-
-                    <form method="POST" class="auth-form">
-                        <div class="mb-3">
-                            <label for="username" class="form-label auth-label">Tên đăng nhập <span class="text-danger">*</span></label>
-                            <input
-                                type="text"
-                                class="form-control auth-input"
-                                id="username"
-                                name="username"
-                                value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>"
-                                required
-                            >
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="password" class="form-label auth-label">Mật khẩu <span class="text-danger">*</span></label>
-                            <input
-                                type="password"
-                                class="form-control auth-input"
-                                id="password"
-                                name="password"
-                                required
-                            >
-                        </div>
-
-                        <button type="submit" class="btn auth-btn-submit w-100">Đăng Nhập</button>
-                    </form>
-
-                    <div class="auth-footer">
-                        <p>Bạn chưa có tài khoản? <a href="auth-register.php" class="auth-link">Đăng ký ngay</a></p>
-                    </div>
+            <?php if (!empty($error_message)): ?>
+                <div class="alert alert-danger auth-alert" role="alert">
+                    <?php echo htmlspecialchars($error_message); ?>
                 </div>
+            <?php endif; ?>
+
+            <form method="POST" class="auth-form">
+                <div class="mb-3">
+                    <label for="username" class="form-label auth-label">Tên đăng nhập</label>
+                    <input type="text" class="form-control auth-input" id="username" name="username"
+                        value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="password" class="form-label auth-label">Mật khẩu</label>
+                    <input type="password" class="form-control auth-input" id="password" name="password" required>
+                </div>
+
+                <button type="submit" class="btn auth-btn-submit w-100">Đăng Nhập</button>
+            </form>
+
+            <div class="auth-footer">
+                <p>Bạn chưa có tài khoản? <a href="auth-register.php" class="auth-link">Đăng ký ngay</a></p>
+            </div>
+        </div>
     </main>
 
     <footer class="site-footer">
@@ -186,5 +178,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-</html>
 
+</html>
