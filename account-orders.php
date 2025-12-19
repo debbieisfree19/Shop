@@ -328,7 +328,7 @@ if (!empty($page_order_ids)) {
             o.ShippingCity, o.ShippingDistrict, o.ShippingWard, o.ShippingStreet, o.ShippingNumber,
             o.CreatedDate, o.DateReceived,
             oi.OrderItemID, oi.Quantity, oi.UnitPrice, oi.DiscountedPrice,
-            p.ProductName, p.Image, s.Format, s.ISBN,
+            p.ProductName, p.Image, s.Format, s.ISBN, p.ProductID, s.SKUID,
             c.CarrierName, c.ShippingPrice,
             v.DiscountValue, v.DiscountType  
         FROM `Order` o
@@ -382,7 +382,9 @@ if (!empty($page_order_ids)) {
                 'ISBN' => $order['ISBN'],
                 'Quantity' => $order['Quantity'],
                 'UnitPrice' => $order['UnitPrice'],
-                'DiscountedPrice' => $order['DiscountedPrice']
+                'DiscountedPrice' => $order['DiscountedPrice'],
+                'ProductID' => $order['ProductID'], // Thêm dòng này
+                'SKUID' => $order['SKUID']
             ];
         }
     }
@@ -530,6 +532,12 @@ if (!empty($page_order_ids)) {
                                         }
                                         // [LOGIC MỚI KẾT THÚC]
                                         ?>
+                                        <div class="mt-2">
+                                            <a href="product-detail.php?id=<?php echo urlencode($item['ProductID']); ?>&sku=<?php echo urlencode($item['SKUID']); ?>#review-section" 
+                                            class="btn account-btn-secondary account-btn-rate">
+                                                <i class="fas fa-star me-1"></i> Đánh giá sản phẩm này
+                                            </a>
+                                        </div>
                                     </p>
                                 </div>
                             </div>
@@ -611,9 +619,6 @@ if (!empty($page_order_ids)) {
                             ?>
                         </div>
                         <div class="account-order-actions">
-                            <button class="btn account-btn-secondary account-btn-rate">
-                                <i class="fas fa-star"></i> Đánh giá
-                            </button>
                             <a href="shop.php" class="btn account-btn-secondary account-btn-rebuy text-decoration-none">
                                 <i class="fas fa-redo"></i> Mua lại
                             </a>
