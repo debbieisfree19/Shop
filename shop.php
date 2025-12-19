@@ -2,6 +2,7 @@
 /**
  * MOONLIT STORE - SHOP PAGE
  * - Dùng bảng Product, Categories, Product_Categories, Publisher, Review
+ * - Giá hiển thị = giá thấp nhất theo SKU đang active + SALE đang hiệu lực (PRODUCT_SALE)
  */
 
 session_start();
@@ -14,9 +15,10 @@ $currentUsername = $_SESSION['username'] ?? '';
 // Lọc từ query string
 $search     = trim($_GET['q'] ?? '');
 $categoryId = $_GET['category'] ?? '';
+$publisherId = trim($_GET['publisher'] ?? '');
 
 // ============================
-// Helper nav_active (giống index.php)
+// Helper nav_active
 // ============================
 $currentPage = 'shop.php';
 if (!function_exists('nav_active')) {
@@ -43,7 +45,6 @@ try {
     $publishers = $pubStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
 
-
 // ============================
 // Lấy danh sách sản phẩm
 // ============================
@@ -52,6 +53,10 @@ $products      = [];
 
 try {
     $params = [];
+
+    // NOTE:
+    // - SKU không nằm trong Product (schema mới)
+    // - Sale nằm ở PRODUCT_SALE theo SKUID (có thể nhiều dòng), nên phải gom MIN(DiscountedPrice) theo SKUID trong khoảng thời gian hiệu lực
     $sql = "
 SELECT
   p.ProductID,
@@ -71,26 +76,20 @@ JOIN (
   SELECT
     s.ProductID,
 
-    -- giá hiển thị nhỏ nhất (sale đang chạy thì lấy sale, không thì lấy sellprice)
+    -- giá hiển thị nhỏ nhất (sale đang chạy thì lấy sale, không thì lấy SellPrice)
     MIN(
       CASE
-        WHEN ps.DiscountedPrice IS NOT NULL
-         AND ps.StartDate <= NOW()
-         AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
-        THEN ps.DiscountedPrice
+        WHEN psa.DiscountedPrice IS NOT NULL THEN psa.DiscountedPrice
         ELSE s.SellPrice
       END
     ) AS MinFinalPrice,
 
-    -- skuid rẻ nhất (để bấm vào variant rẻ nhất nếu muốn)
+    -- SKUID rẻ nhất (theo FinalPrice)
     SUBSTRING_INDEX(
       GROUP_CONCAT(
         s.SKUID ORDER BY
           CASE
-            WHEN ps.DiscountedPrice IS NOT NULL
-             AND ps.StartDate <= NOW()
-             AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
-            THEN ps.DiscountedPrice
+            WHEN psa.DiscountedPrice IS NOT NULL THEN psa.DiscountedPrice
             ELSE s.SellPrice
           END ASC,
           s.SKUID ASC
@@ -99,15 +98,12 @@ JOIN (
       ',', 1
     ) AS CheapestSKUID,
 
-    -- giá gốc tương ứng với skuid rẻ nhất (luôn là SellPrice)
+    -- Giá gốc tương ứng với SKUID rẻ nhất (SellPrice)
     SUBSTRING_INDEX(
       GROUP_CONCAT(
         s.SellPrice ORDER BY
           CASE
-            WHEN ps.DiscountedPrice IS NOT NULL
-             AND ps.StartDate <= NOW()
-             AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
-            THEN ps.DiscountedPrice
+            WHEN psa.DiscountedPrice IS NOT NULL THEN psa.DiscountedPrice
             ELSE s.SellPrice
           END ASC,
           s.SKUID ASC
@@ -117,18 +113,27 @@ JOIN (
     ) AS MinOriginalPrice
 
   FROM SKU s
-  LEFT JOIN PRODUCT_SALE ps ON ps.SKUID = s.SKUID
+  LEFT JOIN (
+    SELECT
+      ps.SKUID,
+      MIN(ps.DiscountedPrice) AS DiscountedPrice
+    FROM PRODUCT_SALE ps
+    WHERE ps.StartDate <= NOW()
+      AND (ps.EndDate IS NULL OR ps.EndDate >= NOW())
+    GROUP BY ps.SKUID
+  ) psa ON psa.SKUID = s.SKUID
   WHERE s.Status = 1
   GROUP BY s.ProductID
 ) x ON x.ProductID = p.ProductID
 
 WHERE 1=1
+  AND (p.Status = 1 OR p.Status IS NULL)
 ";
 
     // Lọc nhà xuất bản
-    if (!empty($_GET['publisher'])) {
+    if ($publisherId !== '') {
         $sql .= " AND p.PublisherID = :publisher";
-        $params[':publisher'] = $_GET['publisher'];
+        $params[':publisher'] = $publisherId;
     }
 
     // Tìm theo tên sách
@@ -150,7 +155,7 @@ WHERE 1=1
         $params[':categoryId'] = $categoryId;
     }
 
-    // Lọc giá (theo giá hiển thị = giá rẻ nhất của SKU)
+    // Lọc giá (theo giá hiển thị = MinFinalPrice)
     if (!empty($_GET['min_price'])) {
         $sql .= " AND x.MinFinalPrice >= :min_price";
         $params[':min_price'] = (float)$_GET['min_price'];
@@ -187,8 +192,6 @@ WHERE 1=1
 } catch (Exception $e) {
     $error_message = 'Không thể tải danh sách sản phẩm: ' . $e->getMessage();
 }
-
-
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -199,61 +202,61 @@ WHERE 1=1
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="moonlit-style.css">
-
 </head>
 <body class="account-body">
 
 <!-- ===================== HEADER ===================== -->
-    <header class="account-header site-header">
-        <div class="container header-inner">
-            <div class="header-left">
-                <a href="index.php" class="logo-link header-logo">
-                    <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+<header class="account-header site-header">
+    <div class="container header-inner">
+        <div class="header-left">
+            <a href="index.php" class="logo-link header-logo">
+                <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+            </a>
 
+            <nav class="header-menu">
+                <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
+                    Trang chủ
                 </a>
-
-                <nav class="header-menu">
-                    <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
-                        Trang chủ
-                    </a>
-                    <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
-                        Cửa hàng
-                    </a>
-                    <a href="aboutus.php"
-                        class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
-                        Về chúng tôi
-                    </a>
-                    <a href="return-policy.php"
-                        class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
-                        Chính sách
-                    </a>
-                </nav>
-            </div>
-
-            <div class="header-right">
-                <form method="GET" action="shop.php" class="header-search-form">
-                    <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
-                    <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
-                </form>
-
-                <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
-
-                <?php if ($isLoggedIn): ?>
-                    <div class="header-account">
-                        <span class="account-username">
-                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                        </span>
-                        <div class="header-account-actions">
-                            <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
-                            <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
-                        </div>
-                    </div>
-                <?php else: ?>
-                    <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
-                <?php endif; ?>
-            </div>
+                <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
+                    Cửa hàng
+                </a>
+                <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">
+                    Moonlit Forum
+                </a>
+                <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
+                    Về chúng tôi
+                </a>
+                <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
+                    Chính sách
+                </a>
+            </nav>
         </div>
-    </header>
+
+        <div class="header-right">
+            <form method="GET" action="shop.php" class="header-search-form">
+                <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách..."
+                       value="<?php echo htmlspecialchars($search); ?>">
+                <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
+            </form>
+
+            <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
+
+            <?php if ($isLoggedIn): ?>
+                <div class="header-account">
+                    <span class="account-username">
+                        Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                    </span>
+                    <div class="header-account-actions">
+                        <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                        <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
+                    </div>
+                </div>
+            <?php else: ?>
+                <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+            <?php endif; ?>
+        </div>
+    </div>
+</header>
 
 <main class="account-main shop-main">
     <div class="container">
@@ -278,7 +281,7 @@ WHERE 1=1
                                 <option value="">Tất cả</option>
                                 <?php foreach ($categories as $cate): ?>
                                     <option
-                                        value="<?php echo $cate['CategoryID']; ?>"
+                                        value="<?php echo htmlspecialchars($cate['CategoryID']); ?>"
                                         <?php echo ($categoryId == $cate['CategoryID']) ? 'selected' : ''; ?>
                                     >
                                         <?php echo htmlspecialchars($cate['CategoryName']); ?>
@@ -293,8 +296,8 @@ WHERE 1=1
                                 <option value="">Tất cả</option>
                                 <?php foreach ($publishers as $pub): ?>
                                     <option
-                                        value="<?php echo $pub['PublisherID']; ?>"
-                                        <?php echo (!empty($_GET['publisher']) && $_GET['publisher'] == $pub['PublisherID']) ? 'selected' : ''; ?>
+                                        value="<?php echo htmlspecialchars($pub['PublisherID']); ?>"
+                                        <?php echo ($publisherId !== '' && $publisherId == $pub['PublisherID']) ? 'selected' : ''; ?>
                                     >
                                         <?php echo htmlspecialchars($pub['PublisherName']); ?>
                                     </option>
@@ -384,7 +387,7 @@ WHERE 1=1
                                     <?php echo htmlspecialchars($product['ProductName']); ?>
                                 </h2>
 
-                               <div class="shop-product-price-row">
+                                <div class="shop-product-price-row">
                                     <?php if (!empty($product['IsOnSale'])): ?>
                                         <span class="shop-product-price-current">
                                             <?php echo number_format((float)$product['MinFinalPrice'], 0, ',', '.'); ?> đ
@@ -399,19 +402,17 @@ WHERE 1=1
                                     <?php endif; ?>
                                 </div>
 
-
                                 <div class="shop-product-actions">
                                     <a href="product-detail.php?id=<?php echo urlencode($product['ProductID']); ?>"
-                                    class="account-btn-secondary shop-btn">
+                                       class="account-btn-secondary shop-btn">
                                         Chi tiết
                                     </a>
 
                                     <a href="product-detail.php?id=<?php echo urlencode($product['ProductID']); ?>#variants"
-                                    class="account-btn-save shop-btn">
+                                       class="account-btn-save shop-btn">
                                         Chọn phiên bản
                                     </a>
                                 </div>
-
 
                             </div>
                         </article>

@@ -46,10 +46,9 @@ try {
         $params[':skuid'] = $skuKey;
     }
 
-    $sqlProduct = "
+        $sqlProduct = "
         SELECT
             p.ProductID,
-            p.SKU,
             p.ProductName,
             p.Description,
             p.CreatedDate,
@@ -65,6 +64,7 @@ try {
         GROUP BY p.ProductID
         LIMIT 1
     ";
+
 
     $stmt = $pdo->prepare($sqlProduct);
     $stmt->execute($params);
