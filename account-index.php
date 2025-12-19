@@ -14,7 +14,8 @@ $currentPage = 'account-index.php'; // Đặt tên trang hiện tại để Acti
 
 // --- 2. BỔ SUNG HÀM HỖ TRỢ CHO HEADER ---
 if (!function_exists('nav_active')) {
-    function nav_active($page, $current) {
+    function nav_active($page, $current)
+    {
         return $page === $current ? 'nav-active' : '';
     }
 }
@@ -41,6 +42,7 @@ if ($user && $user['Role'] === 'Admin') {
 
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -49,13 +51,14 @@ if ($user && $user['Role'] === 'Admin') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" type="text/css" href="moonlit-style.css">
 </head>
+
 <body class="account-body">
     <!-- ===================== HEADER ===================== -->
     <header class="account-header site-header">
         <div class="container header-inner">
             <div class="header-left">
                 <a href="index.php" class="logo-link header-logo">
-                    <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+                    <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
 
                 </a>
 
@@ -89,13 +92,14 @@ if ($user && $user['Role'] === 'Admin') {
 
                 <?php if ($isLoggedIn): ?>
                     <div class="header-account">
-                        <span class="account-username">
-                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                        </span>
                         <div class="header-account-actions">
                             <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
                             <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
                         </div>
+
+                        <span class="account-username">
+                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                        </span>
                     </div>
                 <?php else: ?>
                     <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
@@ -109,16 +113,20 @@ if ($user && $user['Role'] === 'Admin') {
             <!-- Left Sidebar -->
             <div class="col-lg-3 account-sidebar">
                 <nav class="account-menu">
-                    <a href="?section=profile" class="account-menu-item <?php echo $current_section === 'profile' ? 'active' : ''; ?>">
+                    <a href="?section=profile"
+                        class="account-menu-item <?php echo $current_section === 'profile' ? 'active' : ''; ?>">
                         <i class="fas fa-user"></i> Thông tin cá nhân
                     </a>
-                    <a href="?section=voucher" class="account-menu-item <?php echo $current_section === 'voucher' ? 'active' : ''; ?>">
+                    <a href="?section=voucher"
+                        class="account-menu-item <?php echo $current_section === 'voucher' ? 'active' : ''; ?>">
                         <i class="fas fa-coins"></i> Voucher & Đổi Điểm
                     </a>
-                    <a href="?section=orders" class="account-menu-item <?php echo $current_section === 'orders' ? 'active' : ''; ?>">
+                    <a href="?section=orders"
+                        class="account-menu-item <?php echo $current_section === 'orders' ? 'active' : ''; ?>">
                         <i class="fas fa-history"></i> Lịch sử đặt hàng
                     </a>
-                    <a href="?section=tracking" class="account-menu-item <?php echo $current_section === 'tracking' ? 'active' : ''; ?>">
+                    <a href="?section=tracking"
+                        class="account-menu-item <?php echo $current_section === 'tracking' ? 'active' : ''; ?>">
                         <i class="fas fa-truck"></i> Theo dõi đơn hàng
                     </a>
                     <hr class="account-menu-divider">
@@ -149,10 +157,57 @@ if ($user && $user['Role'] === 'Admin') {
     </div>
 
     <footer class="site-footer">
-        © 2025 Moonlit — All rights reserved.
+        <div class="container footer-grid">
+
+            <!-- COL 1 -->
+            <div class="footer-col">
+                <h4>Moonlit</h4>
+                <p class="footer-desc">
+                    Hiệu sách trực tuyến dành cho những tâm hồn yêu đọc.
+                    Chúng tôi tin mỗi cuốn sách đều có ánh trăng riêng 🌙
+                </p>
+            </div>
+
+            <!-- COL 2 -->
+            <div class="footer-col">
+                <h4>Liên kết</h4>
+                <ul>
+                    <li><a href="index.php">Trang chủ</a></li>
+                    <li><a href="shop.php">Cửa hàng</a></li>
+                    <li><a href="forum.php">Moonlit Forum</a></li>
+                    <li><a href="aboutus.php">Về chúng tôi</a></li>
+                </ul>
+            </div>
+
+            <!-- COL 3 -->
+            <div class="footer-col">
+                <h4>Blog & Nội dung</h4>
+                <ul>
+                    <li><a href="blogs.php">Blog Moonlit</a></li>
+                    <li><a href="blogs.php">Review sách</a></li>
+                    <li><a href="blogs.php">Góc đọc chậm</a></li>
+                </ul>
+            </div>
+
+            <!-- COL 4 -->
+            <div class="footer-col">
+                <h4>Chính sách</h4>
+                <ul>
+                    <li><a href="policy.php">Chính sách mua hàng</a></li>
+                    <li><a href="policy.php">Bảo mật thông tin</a></li>
+                    <li><a href="policy.php">Điều khoản sử dụng</a></li>
+                    <li><a href="contact_us.php">Liên hệ</a></li>
+                </ul>
+            </div>
+
+        </div>
+
+        <div class="footer-bottom">
+            © 2025 Moonlit — All rights reserved.
+        </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-</html>
 
+</html>
