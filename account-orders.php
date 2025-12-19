@@ -403,27 +403,44 @@ if (!empty($page_order_ids)) {
 ?>
 
 <div class="account-section" data-page-id="orders-page">
-    <div class="account-section-header">
-        <h2 class="account-section-title">Lịch sử đặt hàng</h2>
+    
+    <h2 class="account-section-title mb-3">Lịch sử đặt hàng</h2>
+
+    <div class="mb-3 d-inline-flex align-items-center" style="color: var(--color-deep-blue); font-size: 14px; background: #f0f4f8; padding: 12px 15px; border-radius: 8px; width: 100%;">
+        <i class="fas fa-info-circle me-2"></i>
+        <span>
+            Hiểu rõ hơn về 
+            <a href="return-policy.php#return-policy" class="fw-bold text-decoration-none" style="color: var(--color-deep-blue);">chính sách đổi/trả</a> 
+            và 
+            <a href="return-policy.php#refund-policy" class="fw-bold text-decoration-none" style="color: var(--color-deep-blue);">hoàn tiền</a> 
+            của Moonlit.
+        </span>
+        <i class="fas fa-chevron-right ms-auto" style="font-size: 10px;"></i>
+    </div>
+
+    <div class="account-section-header d-flex justify-content-end mb-4">
         <div class="account-filters">
             <form method="GET" action="">
                 <?php
+                // Giữ nguyên logic xử lý hidden input của bạn
                 foreach ($_GET as $key => $value) {
-                    if ($key !== 'status'&& $key !== 'page') {
+                    if ($key !== 'status' && $key !== 'page') {
                         echo '<input type="hidden" name="' . htmlspecialchars($key) . '" value="' . htmlspecialchars($value) . '">';
                     }
                 }
                 ?>
                 <select name="status" class="account-filter-select" onchange="this.form.submit()">
-                    <option value="all" <?php echo $filter === 'all' ? 'selected' : ''; ?>>Tất cả đơn hàng</option>
-                    <option value="received" <?php echo $filter === 'received' ? 'selected' : ''; ?>>Đã nhận</option>
-                    <option value="returned" <?php echo $filter === 'returned' ? 'selected' : ''; ?>>Trả hàng</option>
-                    <option value="refunded" <?php echo $filter === 'refunded' ? 'selected' : ''; ?>>Đã hoàn tiền</option>
-                    <option value="cancelled" <?php echo $filter === 'cancelled' ? 'selected' : ''; ?>>Bị hủy</option>
+                    <option value="all" <?php echo ($filter ?? 'all') === 'all' ? 'selected' : ''; ?>>Tất cả đơn hàng</option>
+                    <option value="received" <?php echo ($filter ?? '') === 'received' ? 'selected' : ''; ?>>Đã nhận</option>
+                    <option value="returned" <?php echo ($filter ?? '') === 'returned' ? 'selected' : ''; ?>>Trả hàng</option>
+                    <option value="refunded" <?php echo ($filter ?? '') === 'refunded' ? 'selected' : ''; ?>>Đã hoàn tiền</option>
+                    <option value="cancelled" <?php echo ($filter ?? '') === 'cancelled' ? 'selected' : ''; ?>>Bị hủy</option>
                 </select>
             </form>
         </div>
     </div>
+
+</div>
 
     <?php if (!empty($message)): ?>
         <div class="alert alert-<?php echo htmlspecialchars($message_type); ?> account-alert" role="alert">
@@ -597,9 +614,9 @@ if (!empty($page_order_ids)) {
                             <button class="btn account-btn-secondary account-btn-rate">
                                 <i class="fas fa-star"></i> Đánh giá
                             </button>
-                            <button class="btn account-btn-secondary account-btn-rebuy">
+                            <a href="shop.php" class="btn account-btn-secondary account-btn-rebuy text-decoration-none">
                                 <i class="fas fa-redo"></i> Mua lại
-                            </button>
+                            </a>
 
                              <?php
                             // Logic hiển thị nút Trả hàng

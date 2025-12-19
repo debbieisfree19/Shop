@@ -91,52 +91,87 @@ if (!function_exists('nav_active')) {
     </section>
 
     <!-- Exchange / Return -->
-    <div class="account-card mb-3">
-      <h2 class="account-card-title mb-3">1) Đổi / Trả</h2>
-
-      <div class="account-order-card mb-3" style="padding:16px;">
-        <strong style="font-size:14px;">Điều kiện áp dụng</strong>
-        <ul class="mb-0" style="font-size:14px; margin-top:8px;">
-          <li>Sách còn nguyên tem/nhãn (nếu có), không rách/móp/nước, không ghi chú lên sách.</li>
-          <li>Đổi/trả trong vòng <strong>07 ngày</strong> kể từ ngày nhận hàng (theo trạng thái giao hàng).</li>
-          <li>Áp dụng cho lỗi do Moonlit: giao sai SKU/phiên bản, thiếu hàng, sách lỗi in/rách/móp do vận chuyển.</li>
-        </ul>
-      </div>
+    <div class="account-card mb-3" id="return-policy">
+      <h2 class="account-card-title mb-3">1) Chính sách Đổi/Trả</h2>
 
       <div class="row g-3">
-        <div class="col-12 col-md-6">
-          <div class="account-order-card h-100" style="padding:16px;">
-            <strong style="font-size:14px;">Trường hợp được đổi</strong>
-            <ul class="mb-0" style="font-size:14px; margin-top:8px;">
-              <li>Giao sai phiên bản (bìa mềm/bìa cứng), sai ISBN, sai SKU.</li>
-              <li>Sách lỗi sản xuất: in thiếu trang, lem mực nặng, bong gáy.</li>
-              <li>Hàng hư hại do vận chuyển (móp, rách nhiều).</li>
+        <div class="col-12 col-lg-7">
+          <div class="account-order-card mb-3" style="padding:16px;">
+            <strong style="font-size:14px; color: var(--color-deep-blue);"><i class="fas fa-check-circle me-1"></i> Điều kiện áp dụng</strong>
+            <ul class="mb-0 mt-2" style="font-size:14px;">
+              <li>Sách còn nguyên tem/nhãn, không rách/móp/nước, không ghi chú lên sách.</li>
+              <li>Đổi/trả trong vòng <strong>07 ngày</strong> kể từ ngày nhận hàng thành công.</li>
+              <li>Lỗi do Moonlit: giao sai SKU, thiếu hàng, lỗi sản xuất hoặc hư hại do vận chuyển.</li>
             </ul>
           </div>
-        </div>
 
-        <div class="col-12 col-md-6">
+          <div class="row g-2">
+            <div class="col-12 col-md-6">
+              <div class="account-order-card h-100" style="padding:16px; border-left: 4px solid #28a745;">
+                <strong style="font-size:13px; color: #28a745;">Được hỗ trợ</strong>
+                <ul class="mb-0 mt-1" style="font-size:13px; padding-left: 1.2rem;">
+                  <li>Giao sai phiên bản, sai ISBN.</li>
+                  <li>Lỗi in ấn: thiếu trang, lem mực.</li>
+                  <li>Móp méo nặng do vận chuyển.</li>
+                </ul>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="account-order-card h-100" style="padding:16px; border-left: 4px solid #dc3545;">
+                <strong style="font-size:13px; color: #dc3545;">Không hỗ trợ</strong>
+                <ul class="mb-0 mt-1" style="font-size:13px; padding-left: 1.2rem;">
+                  <li>Đã sử dụng/ghi chú lên sách.</li>
+                  <li>Quá thời hạn 07 ngày.</li>
+                  <li>Không có video unbox bằng chứng.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 col-lg-5">
           <div class="account-order-card h-100" style="padding:16px;">
-            <strong style="font-size:14px;">Trường hợp không hỗ trợ</strong>
-            <ul class="mb-0" style="font-size:14px; margin-top:8px;">
-              <li>Đã sử dụng/ghi chú lên sách, hư hại do bảo quản cá nhân.</li>
-              <li>Quá thời hạn 07 ngày.</li>
-              <li>Không có bằng chứng mở hộp (khuyến khích quay video unbox).</li>
-            </ul>
+            <strong style="font-size:14px; color: var(--color-deep-blue);"><i class="fas fa-info-circle me-1"></i> Quy trình Đổi/Trả</strong>
+            <ol class="mb-0 mt-2" style="font-size:14px; padding-left: 1.2rem;">
+              <li>Mã đơn hàng + Ảnh chụp rõ nét tình trạng sách (hoặc video mở hộp).</li>
+              <li>Vào <strong>Lịch sử đơn hàng</strong> > nhấn nút <strong>"Trả hàng"</strong>. Hoặc nhắn tin qua Fanpage.</li>
+              <li>Moonlit sẽ phản hồi và hướng dẫn bạn cách đóng gói gửi hàng về.</li>
+            </ol>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Refund -->
-    <div class="account-card mb-3">
-      <h2 class="account-card-title mb-3">2) Hoàn tiền</h2>
+    <div class="account-card mb-3" id="refund-policy">
+      <h2 class="account-card-title mb-3">2) Chính sách Hoàn tiền</h2>
 
       <div class="account-order-card" style="padding:16px;">
-        <ul class="mb-0" style="font-size:14px;">
-          <li>Nếu không còn hàng để đổi, Moonlit sẽ hỗ trợ <strong>hoàn tiền</strong> theo giá bạn đã thanh toán.</li>
-          <li>Thời gian xử lý dự kiến: <strong>3–7 ngày làm việc</strong> (tùy ngân hàng/đơn vị thanh toán).</li>
-          <li>Hoàn tiền qua đúng phương thức: COD (chuyển khoản), Bank (chuyển khoản/đối soát).</li>
+        <div class="mb-3" style="font-size:14px;">
+            <p>Trong trường hợp sản phẩm lỗi mà Moonlit không còn hàng để đổi, hoặc yêu cầu trả hàng được phê duyệt, số tiền hoàn trả sẽ được tính toán như sau:</p>
+        </div>
+
+        <ul class="mb-0" style="font-size:14px; line-height: 1.6;">
+          <li>
+            <strong>Cách tính số tiền hoàn:</strong> 
+            Số tiền hoàn lại cho mỗi sản phẩm = <strong>Giá thực tế của sản phẩm - (Giá trị Voucher đã dùng chia theo tỷ lệ)</strong>. 
+            <br><small class="text-secondary">*Điều này giúp đảm bảo công bằng khi bạn chỉ trả lại một phần của đơn hàng có áp dụng mã giảm giá.</small>
+          </li>
+          <li>
+            <strong>Phí vận chuyển:</strong> Rất tiếc, phí vận chuyển ban đầu sẽ <strong>không được hoàn lại</strong> (vì đây là phí dịch vụ đã chi trả cho đơn vị vận chuyển).
+          </li>
+          <li>
+            <strong>Phương thức nhận tiền:</strong>
+            <ul>
+                <li><strong>Đơn hàng trả trước (Bank/Ví):</strong> Tiền được hoàn về đúng tài khoản/thẻ bạn đã dùng để thanh toán.</li>
+                <li><strong>Đơn hàng COD:</strong> Moonlit sẽ liên hệ để nhận số tài khoản và chuyển khoản trực tiếp cho bạn.</li>
+            </ul>
+          </li>
+          <li>
+            <strong>Thời gian xử lý:</strong> Từ <strong>3–7 ngày làm việc</strong> kể từ khi Moonlit xác nhận đã nhận lại hàng (thời gian thực tế phụ thuộc vào tốc độ xử lý của ngân hàng).
+          </li>
+          <li>
+            <strong>Lưu ý:</strong> Số tiền sẽ được hệ thống làm tròn xuống hàng đơn vị (VNĐ) để khớp với giao dịch ngân hàng.
+          </li>
         </ul>
       </div>
     </div>
@@ -182,25 +217,86 @@ if (!function_exists('nav_active')) {
       </div>
     </div>
 
-    <!-- How to request -->
-    <div class="account-card">
-      <h2 class="account-card-title mb-3">5) Cách gửi yêu cầu đổi/trả</h2>
+    <div class="account-card mb-3" id="membership-policy">
+      <h2 class="account-card-title mb-3">5) Thành viên & Tích điểm Moonlit</h2>
 
       <div class="account-order-card mb-3" style="padding:16px;">
-        <ol class="mb-0" style="font-size:14px;">
-          <li>Chuẩn bị mã đơn hàng + ảnh tình trạng sách (hoặc video unbox).</li>
-          <li>Gửi yêu cầu qua trang tài khoản (mục “Yêu cầu đổi/trả”) hoặc inbox Moonlit.</li>
-          <li>Moonlit phản hồi xác nhận và hướng dẫn gửi hàng về (nếu cần).</li>
-        </ol>
+        <strong style="font-size:14px; color: var(--color-deep-blue);">Hệ thống bậc thành viên</strong>
+        <p class="mb-2" style="font-size:13px; color: #666;">Bậc hạng dựa trên tổng chi tiêu tích lũy (sau khi đã trừ đơn trả hàng):</p>
+        <div class="table-responsive">
+          <table class="table table-sm table-borderless mb-0" style="font-size:13px;">
+            <thead class="text-secondary">
+              <tr>
+                <th>Hạng</th>
+                <th>Chi tiêu tích lũy</th>
+                <th>Đặc quyền</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Member</strong></td>
+                <td>Dưới 100k</td>
+                <td>Voucher chung</td>
+              </tr>
+              <tr>
+                <td><strong style="color: #cd7f32;">Bronze</strong></td>
+                <td>Từ 100k</td>
+                <td>Voucher hạng Đồng</td>
+              </tr>
+              <tr>
+                <td><strong style="color: #9ea0a2;">Silver</strong></td>
+                <td>Từ 200k</td>
+                <td>Voucher hạng Bạc</td>
+              </tr>
+              <tr>
+                <td><strong style="color: #d4af37;">Gold</strong></td>
+                <td>Từ 300k</td>
+                <td>Voucher hạng Vàng</td>
+              </tr>
+              <tr>
+                <td><strong style="color: #555;">Platinum</strong></td>
+                <td>Từ 400k</td>
+                <td>Voucher Bạch Kim</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="d-flex flex-wrap gap-2">
-        <a href="shop.php" class="account-btn-save text-decoration-none">Quay lại Cửa hàng</a>
-        <a href="cart.php" class="account-btn-secondary text-decoration-none">Xem Giỏ hàng</a>
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <div class="account-order-card h-100" style="padding:16px;">
+            <strong style="font-size:14px;">Quy tắc tích điểm</strong>
+            <ul class="mb-0" style="font-size:13px; margin-top:8px;">
+              <li>Mỗi <strong>10.000đ</strong> thanh toán = <strong>1 điểm</strong>.</li>
+              <li>Điểm cộng khi đơn hàng chuyển thành <strong>"Đã nhận"</strong>.</li>
+              <li>Đơn <strong>Trả hàng</strong> sẽ bị trừ lại số điểm tương ứng.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6">
+          <div class="account-order-card h-100" style="padding:16px;">
+            <strong style="font-size:14px;">Cách nhận Voucher</strong>
+            <ul class="mb-0" style="font-size:13px; margin-top:8px;">
+              <li><strong>Tự động:</strong> Voucher hạng tặng khi bạn thăng cấp.</li>
+              <li><strong>Đổi điểm:</strong> Dùng điểm tích lũy đổi mã trong trang tài khoản.</li>
+              <li>Voucher có điều kiện đơn tối thiểu và mức giảm tối đa.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-5 pt-4 border-top d-flex flex-wrap gap-3">
+        <a href="shop.php" class="account-btn-save text-decoration-none px-4 py-2">
+            <i class="fas fa-shopping-bag me-2"></i>Quay lại Cửa hàng
+        </a>
+        <a href="cart.php" class="account-btn-secondary text-decoration-none px-4 py-2">
+            <i class="fas fa-shopping-cart me-2"></i>Xem Giỏ hàng
+        </a>
       </div>
     </div>
-
-  </div>
+  </div> 
 </main>
 
 <!-- ===================== FOOTER ===================== -->
