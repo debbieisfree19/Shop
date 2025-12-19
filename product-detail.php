@@ -126,6 +126,38 @@ if ($product && empty($error_message)) {
     }
 }
 
+/* ===================== CAN REVIEW? (only when order status allowed) ===================== */
+$canReview = false;
+
+if ($isLoggedIn && $product) {
+    try {
+        $allowedStatuses = ["Đã nhận", "Bị hủy", "Trả hàng", "Đã hoàn tiền"];
+
+        // Tìm xem user có đơn nào thuộc các trạng thái trên + có chứa SKU của product này không
+        $canReviewSql = "
+            SELECT 1
+            FROM `Order` o
+            JOIN Order_Items oi ON oi.OrderID = o.OrderID
+            JOIN SKU s ON s.SKUID = oi.SKU_ID
+            WHERE o.UserID = :uid
+              AND s.ProductID = :pid
+              AND o.Status IN ('Đã nhận', 'Bị hủy', 'Trả hàng', 'Đã hoàn tiền')
+            LIMIT 1
+        ";
+
+        $st = $pdo->prepare($canReviewSql);
+        $st->execute([
+            ':uid' => $currentUserId,
+            ':pid' => $product['ProductID'],
+        ]);
+
+        $canReview = (bool)$st->fetchColumn();
+    } catch (Exception $e) {
+        $canReview = false;
+    }
+}
+
+
 /* ===================== HANDLE REVIEW SUBMIT (after product loaded) ===================== */
 $review_error   = '';
 $review_success = '';
@@ -135,60 +167,82 @@ if (isset($_GET['review']) && $_GET['review'] === 'success') {
 }
 
 if ($product && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_review') {
+
     if (!$isLoggedIn) {
         $review_error = 'Bạn cần đăng nhập để gửi đánh giá.';
     } else {
-        $rating  = isset($_POST['rating']) ? (int)$_POST['rating'] : 0;
-        $comment = trim($_POST['comment'] ?? '');
 
-        if ($rating < 1 || $rating > 5) {
-            $review_error = 'Vui lòng chọn số sao từ 1 đến 5.';
-        } elseif ($comment === '') {
-            $review_error = 'Bạn hãy viết vài dòng cảm nhận nha.';
-        } else {
-            try {
-                $sqlInsert = "
-                    INSERT INTO Review (ProductID, UserID, Rating, Comment, CreatedDate)
-                    VALUES (:productId, :userId, :rating, :comment, :createdDate)
-                ";
-                $stmtIns = $pdo->prepare($sqlInsert);
-                $stmtIns->execute([
-                    ':productId'   => $product['ProductID'],
-                    ':userId'      => $currentUserId,
-                    ':rating'      => $rating,
-                    ':comment'     => $comment,
-                    ':createdDate' => date('Y-m-d H:i:s'),
-                ]);
+        // 1) Check quyền review: đã mua + status hợp lệ
+        $allowedStatuses = ['Đã nhận', 'Bị hủy', 'Trả hàng', 'Đã hoàn tiền'];
 
-                /* --- BẮT ĐẦU PHẦN CỘNG ĐIỂM THƯỞNG --- */
-                $pointsToGive = 5; // Số điểm tặng cho mỗi đánh giá
-                $reason = "Thưởng đánh giá sản phẩm: " . $product['ProductName'];
+        try {
+            $placeholders = implode(',', array_fill(0, count($allowedStatuses), '?'));
 
-                // Cập nhật tổng điểm trong bảng User_Account
-                $updatePointsSql = "UPDATE User_Account SET Points = Points + :points WHERE UserID = :userId";
-                $pdo->prepare($updatePointsSql)->execute([
-                    ':points' => $pointsToGive,
-                    ':userId' => $currentUserId
-                ]);
+            $sqlCanReview = "
+                SELECT COUNT(*) 
+                FROM `Order` o
+                JOIN Order_Items oi ON oi.OrderID = o.OrderID
+                JOIN SKU s ON s.SKUID = oi.SKU_ID
+                WHERE o.UserID = ?
+                  AND s.ProductID = ?
+                  AND o.Status IN ($placeholders)
+                LIMIT 1
+            ";
 
-                // Lưu lịch sử cộng điểm vào bảng Point_History
-                $historySql = "INSERT INTO Point_History (UserID, PointChange, Reason, CreatedDate) 
-                            VALUES (:userId, :points, :reason, NOW())";
-                $pdo->prepare($historySql)->execute([
-                    ':userId' => $currentUserId,
-                    ':points' => $pointsToGive,
-                    ':reason' => $reason
-                ]);
-                /* --- KẾT THÚC PHẦN CỘNG ĐIỂM THƯỞNG --- */
+            $bind = array_merge([$currentUserId, $product['ProductID']], $allowedStatuses);
 
-                header('Location: product-detail.php?id=' . urlencode($product['ProductID']) . '&review=success');
-                exit;
-            } catch (Exception $e) {
-                $review_error = 'Không thể lưu đánh giá. Thử lại sau nha.';
+            $stmtCan = $pdo->prepare($sqlCanReview);
+            $stmtCan->execute($bind);
+            $canReview = (int)$stmtCan->fetchColumn() > 0;
+
+            if (!$canReview) {
+                $review_error = 'Bạn chỉ có thể đánh giá khi đơn hàng của bạn ở trạng thái: Đã nhận / Bị hủy / Trả hàng / Đã hoàn tiền.';
+            }
+        } catch (Exception $e) {
+            $review_error = 'Không thể kiểm tra quyền đánh giá. Thử lại sau nha.';
+        }
+
+        // 2) Nếu đủ điều kiện thì validate + insert
+        if ($review_error === '') {
+            $rating  = isset($_POST['rating']) ? (int)$_POST['rating'] : 0;
+            $comment = trim($_POST['comment'] ?? '');
+
+            if ($rating < 1 || $rating > 5) {
+                $review_error = 'Vui lòng chọn số sao từ 1 đến 5.';
+            } elseif ($comment === '') {
+                $review_error = 'Bạn hãy viết vài dòng cảm nhận nha.';
+            } else {
+                try {
+                    // (khuyến nghị) chặn 1 user review 1 product nhiều lần
+                    $stmtDup = $pdo->prepare("SELECT 1 FROM Review WHERE ProductID = ? AND UserID = ? LIMIT 1");
+                    $stmtDup->execute([$product['ProductID'], $currentUserId]);
+                    if ($stmtDup->fetchColumn()) {
+                        $review_error = 'Bạn đã đánh giá sản phẩm này rồi.';
+                    } else {
+                        $sqlInsert = "
+                            INSERT INTO Review (ProductID, UserID, Rating, Comment, CreatedDate)
+                            VALUES (:productId, :userId, :rating, :comment, :createdDate)
+                        ";
+                        $stmtIns = $pdo->prepare($sqlInsert);
+                        $stmtIns->execute([
+                            ':productId'   => $product['ProductID'],
+                            ':userId'      => $currentUserId,
+                            ':rating'      => $rating,
+                            ':comment'     => $comment,
+                            ':createdDate' => date('Y-m-d H:i:s'),
+                        ]);
+
+                        header('Location: product-detail.php?id=' . urlencode($product['ProductID']) . '&review=success');
+                        exit;
+                    }
+                } catch (Exception $e) {
+                    $review_error = 'Không thể lưu đánh giá. Thử lại sau nha.';
+                }
             }
         }
     }
 }
+
 
 /* ===================== LOAD REVIEWS ===================== */
 $reviews = [];
@@ -329,19 +383,22 @@ if ($product) {
 
             <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
 
-            <?php if ($isLoggedIn): ?>
-                <div class="header-account">
-                    <span class="account-username">
-                        Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                    </span>
-                    <div class="header-account-actions">
-                        <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
-                        <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
-                    </div>
-                </div>
+            <?php if ($isLoggedIn && $canReview): ?>
+                <form method="POST" class="mb-4">
+                    <input type="hidden" name="action" value="add_review">
+                    ...
+                </form>
+            <?php elseif ($isLoggedIn && !$canReview): ?>
+                <p class="mb-4" style="font-size: 14px; color: var(--color-secondary);">
+                    Bạn chỉ có thể đánh giá khi đơn hàng của bạn ở trạng thái:
+                    <strong>Đã nhận</strong>, <strong>Bị hủy</strong>, <strong>Trả hàng</strong>, <strong>Đã hoàn tiền</strong>.
+                </p>
             <?php else: ?>
-                <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                <p class="mb-4" style="font-size: 14px;">
+                    Bạn cần <a href="auth-login.php" style="color: var(--color-deep-blue);">đăng nhập</a> để viết đánh giá.
+                </p>
             <?php endif; ?>
+
         </div>
     </div>
 </header>

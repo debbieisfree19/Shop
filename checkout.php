@@ -259,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':uid'          => $userId,
                 ':total'        => $subTotal,
                 ':afterVoucher' => $totalAfterVoucher,
-                ':status'       => 'Pending',
+                ':status'       => 'Chờ xác nhận',
                 ':pay'          => $payment,
                 ':city'         => $shippingCity,
                 ':district'     => $shippingDistrict,
@@ -301,7 +301,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':sid'    => $shippingId,
                 ':oid'    => $orderId,
                 ':cid'    => $selectedCarrierId,
-                ':status' => 'Pending'
+                ':status' => 'Chờ xác nhận'
             ]);
 
             // 4) nếu có voucher hợp lệ -> lưu User_Voucher + tăng UsedCount
