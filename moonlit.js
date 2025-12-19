@@ -237,8 +237,8 @@ document.addEventListener('DOMContentLoaded', function () {
                                 <label class="form-check-label">Giao sai hàng</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="return_reasons[${itemId}]" value="Không còn nhu cầu">
-                                <label class="form-check-label">Không nhu cầu</label>
+                                <input class="form-check-input" type="radio" name="return_reasons[${itemId}]" value="Hàng hư hại do vận chuyển">
+                                <label class="form-check-label">Hàng hư hại do vận chuyển</label>
                             </div>
                         </div>
                     </div>

@@ -99,12 +99,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
                         Cửa hàng
                     </a>
+                    <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">
+                        Moonlit Forum
+                    </a>
                     <a href="aboutus.php"
                         class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
                         Về chúng tôi
                     </a>
-                    <a href="return-policy.php"
-                        class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">
+                    <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
                         Chính sách
                     </a>
                 </nav>
