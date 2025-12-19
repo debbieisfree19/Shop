@@ -269,6 +269,7 @@ if (!function_exists('nav_active')) {
             <strong style="font-size:14px;">Quy tắc tích điểm</strong>
             <ul class="mb-0" style="font-size:13px; margin-top:8px;">
               <li>Mỗi <strong>10.000đ</strong> thanh toán = <strong>1 điểm</strong>.</li>
+              <li>Mỗi <strong>lần đánh giá sản phẩm</strong> = <strong>5 điểm</strong>.</li>
               <li>Điểm cộng khi đơn hàng chuyển thành <strong>"Đã nhận"</strong>.</li>
               <li>Đơn <strong>Trả hàng</strong> sẽ bị trừ lại số điểm tương ứng.</li>
             </ul>
