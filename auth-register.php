@@ -12,7 +12,8 @@ $currentUsername = $_SESSION['username'] ?? '';
 $currentPage = 'auth-register.php';
 
 if (!function_exists('nav_active')) {
-    function nav_active($page, $current) {
+    function nav_active($page, $current)
+    {
         return $page === $current ? 'nav-active' : '';
     }
 }
@@ -36,7 +37,8 @@ if (isset($_SESSION['user_id'])) {
     exit;
 }
 
-function generateUserID($pdo) {
+function generateUserID($pdo)
+{
     $stmt = $pdo->query("SELECT MAX(CAST(SUBSTRING(UserID, 2) AS UNSIGNED)) as max_id FROM User_Account");
     $result = $stmt->fetch();
     $next_id = ($result['max_id'] ?? 0) + 1;
@@ -47,8 +49,8 @@ function generateUserID($pdo) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
     $fullname = trim($_POST['fullname'] ?? ''); // Mới
-    $email    = trim($_POST['email'] ?? '');    // Mới
-    $phone    = trim($_POST['phone'] ?? '');    // Mới
+    $email = trim($_POST['email'] ?? '');    // Mới
+    $phone = trim($_POST['phone'] ?? '');    // Mới
     $password = trim($_POST['password'] ?? '');
     $confirm_password = trim($_POST['confirm_password'] ?? '');
 
@@ -82,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     (UserID, Username, FullName, Email, Phone, Password, Role, Status, CreatedDate, Points) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), 0)
                 ");
-                
+
                 $stmt->execute([
                     $user_id,
                     $username,
@@ -94,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 $_SESSION['flash_success'] = 'Đăng ký thành công! Vui lòng đăng nhập.';
-                header('Location: auth-register.php'); 
+                header('Location: auth-register.php');
                 exit;
 
             } catch (Exception $e) {
@@ -107,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -114,13 +117,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="moonlit-style.css">
 </head>
+
 <body class="auth-body">
     <!-- ===================== HEADER ===================== -->
     <header class="account-header site-header">
         <div class="container header-inner">
             <div class="header-left">
                 <a href="index.php" class="logo-link header-logo">
-                    <img src="img/image.png" alt="Moonlit logo" class="logo-img">
+                    <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
+
 
                 </a>
 
@@ -154,13 +159,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <?php if ($isLoggedIn): ?>
                     <div class="header-account">
-                        <span class="account-username">
-                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                        </span>
                         <div class="header-account-actions">
                             <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
                             <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
                         </div>
+
+                        <span class="account-username">
+                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                        </span>
                     </div>
                 <?php else: ?>
                     <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
@@ -187,22 +193,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <form method="POST" class="auth-form">
                 <div class="mb-3">
                     <label class="form-label auth-label">Họ và tên <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control auth-input" name="fullname" value="<?php echo htmlspecialchars($_POST['fullname'] ?? ''); ?>" required>
+                    <input type="text" class="form-control auth-input" name="fullname"
+                        value="<?php echo htmlspecialchars($_POST['fullname'] ?? ''); ?>" required>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label auth-label">Email <span class="text-danger">*</span></label>
-                    <input type="email" class="form-control auth-input" name="email" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" required>
+                    <input type="email" class="form-control auth-input" name="email"
+                        value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" required>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label auth-label">Số điện thoại <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control auth-input" name="phone" value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>" required>
+                    <input type="text" class="form-control auth-input" name="phone"
+                        value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>" required>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label auth-label">Tên đăng nhập <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control auth-input" name="username" value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" required>
+                    <input type="text" class="form-control auth-input" name="username"
+                        value="<?php echo htmlspecialchars($_POST['username'] ?? ''); ?>" required>
                 </div>
 
                 <div class="mb-3">
@@ -229,4 +239,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>
