@@ -381,48 +381,61 @@ if ($product) {
 
 <body class="account-body">
 
-<header class="account-header site-header">
-    <div class="container header-inner">
-        <div class="header-left">
-            <a href="index.php" class="logo-link header-logo">
-                <img src="img/image.png" alt="Moonlit logo" class="logo-img">
-            </a>
+<!-- ===================== HEADER ===================== -->
+    <header class="account-header site-header">
+        <div class="container header-inner">
+            <div class="header-left">
+                <a href="index.php" class="logo-link header-logo">
+                    <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
 
-            <nav class="header-menu">
-                <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">Trang chủ</a>
-                <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">Cửa hàng</a>
-                <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">Về chúng tôi</a>
-                <a href="return-policy.php" class="header-menu-link <?php echo nav_active('return-policy.php', $currentPage); ?>">Chính sách</a>
-            </nav>
-        </div>
 
-        <div class="header-right">
-            <form method="GET" action="shop.php" class="header-search-form">
-                <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
-                <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
-            </form>
+                </a>
 
-            <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
+                <nav class="header-menu">
+                    <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
+                        Trang chủ
+                    </a>
+                    <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
+                        Cửa hàng
+                    </a>
+                    <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">
+                        Moonlit Forum
+                    </a>
+                    <a href="aboutus.php"
+                        class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
+                        Về chúng tôi
+                    </a>
+                    <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
+                        Chính sách
+                    </a>
+                </nav>
+            </div>
 
-            <?php if ($isLoggedIn && $canReview): ?>
-                <form method="POST" class="mb-4">
-                    <input type="hidden" name="action" value="add_review">
-                    ...
+            <div class="header-right">
+                <form method="GET" action="shop.php" class="header-search-form">
+                    <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
+                    <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
                 </form>
-            <?php elseif ($isLoggedIn && !$canReview): ?>
-                <p class="mb-4" style="font-size: 14px; color: var(--color-secondary);">
-                    Bạn chỉ có thể đánh giá khi đơn hàng của bạn ở trạng thái:
-                    <strong>Đã nhận</strong>, <strong>Bị hủy</strong>, <strong>Trả hàng</strong>, <strong>Đã hoàn tiền</strong>.
-                </p>
-            <?php else: ?>
-                <p class="mb-4" style="font-size: 14px;">
-                    Bạn cần <a href="auth-login.php" style="color: var(--color-deep-blue);">đăng nhập</a> để viết đánh giá.
-                </p>
-            <?php endif; ?>
 
+                <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
+
+                <?php if ($isLoggedIn): ?>
+                    <div class="header-account">
+                        <div class="header-account-actions">
+                            <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                            <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
+                        </div>
+
+                        <span class="account-username">
+                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                        </span>
+                    </div>
+                <?php else: ?>
+                    <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                <?php endif; ?>
+            </div>
         </div>
-    </div>
-</header>
+    </header>
 
 <main class="account-main">
     <div class="container">
@@ -713,8 +726,55 @@ if ($product) {
 </main>
 
 <footer class="site-footer">
-    © <?php echo date('Y'); ?> Moonlit Store. All rights reserved.
-</footer>
+        <div class="container footer-grid">
+
+            <!-- COL 1 -->
+            <div class="footer-col">
+                <h4>Moonlit</h4>
+                <p class="footer-desc">
+                    Hiệu sách trực tuyến dành cho những tâm hồn yêu đọc.
+                    Chúng tôi tin mỗi cuốn sách đều có ánh trăng riêng 🌙
+                </p>
+            </div>
+
+            <!-- COL 2 -->
+            <div class="footer-col">
+                <h4>Liên kết</h4>
+                <ul>
+                    <li><a href="index.php">Trang chủ</a></li>
+                    <li><a href="shop.php">Cửa hàng</a></li>
+                    <li><a href="forum.php">Moonlit Forum</a></li>
+                    <li><a href="aboutus.php">Về chúng tôi</a></li>
+                </ul>
+            </div>
+
+            <!-- COL 3 -->
+            <div class="footer-col">
+                <h4>Blog & Nội dung</h4>
+                <ul>
+                    <li><a href="blogs.php">Blog Moonlit</a></li>
+                    <li><a href="blogs.php">Review sách</a></li>
+                    <li><a href="blogs.php">Góc đọc chậm</a></li>
+                </ul>
+            </div>
+
+            <!-- COL 4 -->
+            <div class="footer-col">
+                <h4>Chính sách</h4>
+                <ul>
+                    <li><a href="policy.php">Chính sách mua hàng</a></li>
+                    <li><a href="policy.php">Bảo mật thông tin</a></li>
+                    <li><a href="policy.php">Điều khoản sử dụng</a></li>
+                    <li><a href="contact_us.php">Liên hệ</a></li>
+                </ul>
+            </div>
+
+        </div>
+
+        <div class="footer-bottom">
+            © 2025 Moonlit — All rights reserved.
+        </div>
+    </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
