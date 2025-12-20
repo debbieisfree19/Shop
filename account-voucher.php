@@ -169,7 +169,7 @@ if (!empty($user_rank['tier'])) {
                 $insertStmt = $pdo->prepare("INSERT INTO User_Voucher (ID, UserID, VoucherID, DateReceived) VALUES (?, ?, ?, NOW())");
                 $insertStmt->execute([$new_uv_id, $user_id, $reward['VoucherID']]);
 
-                $pdo->prepare(" UPDATE Voucher SET UsedCount = UsedCount + 1, Status = CASE WHEN UsedCount + 1 >= UsageLimit THEN 0 ELSE Status END WHERE VoucherID = ?")->execute([$reward['VoucherID']]);
+                $pdo->prepare(" UPDATE Voucher SET UsedCount = UsedCount + 1, Status = CASE WHEN UsedCount >= UsageLimit THEN 0 ELSE Status END WHERE VoucherID = ?")->execute([$reward['VoucherID']]);
                 
                 $message .= "🎁 Quà tặng: Bạn nhận được voucher " . ($reward['Code']) . "<br>";
                 $message_type = "success";
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         ->execute([$user_voucher_id, $user_id, $voucher_id]);
 
                     // Update count
-                    $pdo->prepare(" UPDATE Voucher SET UsedCount = UsedCount + 1, Status = CASE WHEN UsedCount + 1 >= UsageLimit THEN 0 ELSE Status END WHERE VoucherID = ?")->execute([$voucher_id]);
+                    $pdo->prepare(" UPDATE Voucher SET UsedCount = UsedCount + 1, Status = CASE WHEN UsedCount >= UsageLimit THEN 0 ELSE Status END WHERE VoucherID = ?")->execute([$voucher_id]);
 
                     $pdo->commit();
                     $message = 'Đổi thành công!';
@@ -244,7 +244,14 @@ if ($page_my < 1) $page_my = 1;
 $offset_my = ($page_my - 1) * $limit_my;
 
 // Đếm tổng số voucher của tôi
-$stmtCountMy = $pdo->prepare("SELECT COUNT(*) FROM User_Voucher WHERE UserID = ? AND OrderID IS NULL");
+$stmtCountMy = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM User_Voucher uv
+    JOIN Voucher v ON uv.VoucherID = v.VoucherID
+    WHERE uv.UserID = ? 
+    AND uv.OrderID IS NULL
+    AND v.Status = 1  -- Thêm dòng này
+");
 $stmtCountMy->execute([$user_id]);
 $total_my = $stmtCountMy->fetchColumn();
 $total_pages_my = ceil($total_my / $limit_my);
@@ -253,7 +260,7 @@ $total_pages_my = ceil($total_my / $limit_my);
 $stmt = $pdo->prepare("
     SELECT uv.ID, uv.DateReceived, v.Code, v.Code AS VoucherName, v.Description, v.EndDate, v.MinOrder, v.MaxDiscount 
     FROM User_Voucher uv JOIN Voucher v ON uv.VoucherID = v.VoucherID 
-    WHERE uv.UserID = ? AND uv.OrderID IS NULL 
+    WHERE uv.UserID = ? AND uv.OrderID IS NULL  AND v.Status = 1
     ORDER BY uv.DateReceived DESC
     LIMIT $limit_my OFFSET $offset_my
 ");
