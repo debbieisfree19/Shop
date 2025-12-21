@@ -76,9 +76,7 @@ if ($user && $user['Role'] === 'Admin') {
                         class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
                         Về chúng tôi
                     </a>
-                    <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
-                        Chính sách
-                    </a>
+                    
                 </nav>
             </div>
 

@@ -523,7 +523,6 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
                 <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">Cửa hàng</a>
                 <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">Moonlit Forum</a>
                 <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">Về chúng tôi</a>
-                <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">Chính sách</a>
             </nav>
         </div>
 
