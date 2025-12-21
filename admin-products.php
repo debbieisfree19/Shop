@@ -9,8 +9,9 @@
 
 
 require_once 'db_connect.php';
-// ====== Check quyền admin (tạm comment nếu đang test) ======
-if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'admin')) {
+ob_start();
+// ====== Check quyền admin ======
+if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'Admin')) {
     // header("Location: auth_login.php");
     // exit;
 }
@@ -40,18 +41,19 @@ function generateCategoryID(PDO $pdo): string
 
     return 'C' . str_pad($nextId, 5, '0', STR_PAD_LEFT);
 }
-// ====== Hàm sinh Publisher dạng PUBL00001 ======
+// ====== Hàm sinh Publisher dạng N00001 ======
 function generatePublisherID(PDO $pdo): string
 {
     $stmt = $pdo->query("
-        SELECT MAX(CAST(SUBSTRING(PublisherID, 2) AS UNSIGNED)) AS max_id
-        FROM publisher
+        SELECT MAX(CAST(SUBSTRING(PublisherID, 2) AS UNSIGNED))
+        FROM Publisher
+        WHERE PublisherID LIKE 'N%'
     ");
-    $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    $nextId = ($row['max_id'] ?? 0) + 1;
 
-    return 'N' . str_pad($nextId, 5, '0', STR_PAD_LEFT);
+    $next = ((int) $stmt->fetchColumn()) + 1;
+    return 'N' . str_pad($next, 5, '0', STR_PAD_LEFT);
 }
+
 require_once 'db_connect.php';
 //====== Hàm sinh Publisher dạng SKU001 ======
 function generateSKUID(PDO $pdo): string
@@ -98,10 +100,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_
     }
     exit;
 }
-/* ===== AJAX DELETE SKU ===== */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_delete_sku') {
-    header('Content-Type: application/json; charset=utf-8');
-    ob_clean();
+/* ===== AJAX DELETE SKU ===== */ else if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'ajax_delete_sku'
+) {
+    if (ob_get_length())
+        ob_clean();
 
     try {
         $skuid = trim($_POST['skuid'] ?? '');
@@ -109,27 +113,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_
             throw new Exception('Thiếu SKUID');
         }
 
+        // Lấy ProductID
+        $stmt = $pdo->prepare("
+            SELECT ProductID FROM SKU WHERE SKUID = :skuid
+        ");
+        $stmt->execute([':skuid' => $skuid]);
+        $productId = $stmt->fetchColumn();
+
+        if (!$productId) {
+            throw new Exception('SKU không tồn tại');
+        }
+
+        // Đếm SKU còn lại
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) FROM SKU
+            WHERE ProductID = :pid AND Status = 1
+        ");
+        $stmt->execute([':pid' => $productId]);
+        $count = (int) $stmt->fetchColumn();
+
+        if ($count <= 1) {
+            throw new Exception('Sản phẩm phải có ít nhất 1 SKU');
+        }
+
         $pdo->beginTransaction();
 
-        // Xoá sale của SKU
         $pdo->prepare("
-            DELETE FROM PRODUCT_SALE
-            WHERE SKUID = :skuid
+            DELETE FROM PRODUCT_SALE WHERE SKUID = :skuid
         ")->execute([':skuid' => $skuid]);
 
-        // Xoá SKU
         $pdo->prepare("
-            DELETE FROM SKU
-            WHERE SKUID = :skuid
+            DELETE FROM SKU WHERE SKUID = :skuid
         ")->execute([':skuid' => $skuid]);
 
         $pdo->commit();
 
-        echo json_encode([
-            'success' => true
-        ]);
+        echo json_encode(['success' => true]);
+
     } catch (Exception $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction())
+            $pdo->rollBack();
         echo json_encode([
             'success' => false,
             'message' => $e->getMessage()
@@ -138,14 +161,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_
     exit;
 }
 
+
 //Xử lý load trang sau mỗi lần thêm
 // ===== AJAX thêm category  =====
-if (
+else if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_POST['action'] ?? '') === 'ajax_add_category'
 ) {
-    header('Content-Type: application/json; charset=utf-8');
-    ob_clean();
+    if (ob_get_length())
+        ob_clean();
 
     try {
         $categoryName = trim($_POST['category_name'] ?? '');
@@ -181,12 +205,12 @@ if (
     exit;
 }
 // ===== AJAX thêm publisher =====
-if (
+else if (
     $_SERVER['REQUEST_METHOD'] === 'POST'
     && ($_POST['action'] ?? '') === 'ajax_add_publisher'
 ) {
-    header('Content-Type: application/json; charset=utf-8');
-    ob_clean();
+    if (ob_get_length())
+        ob_clean();
 
     try {
         $publisherName = trim($_POST['publisher_name'] ?? '');
@@ -221,7 +245,7 @@ if (
 }
 
 // ====== Xử lý submit form ======
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? 'create';
 
     if ($action === 'delete') {
@@ -233,30 +257,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->beginTransaction();
 
-            // Xoá sale
-            $pdo->prepare("
-            DELETE ps
-            FROM PRODUCT_SALE ps
-            JOIN SKU s ON ps.SKUID = s.SKUID
+            // Kiểm tra product đã từng bán chưa
+            $stmt = $pdo->prepare("
+            SELECT COUNT(*) 
+            FROM order_items oi
+            JOIN SKU s ON oi.SKU_ID = s.SKUID
             WHERE s.ProductID = :pid
-        ")->execute([':pid' => $productId]);
+        ");
+            $stmt->execute([':pid' => $productId]);
+            $soldCount = (int) $stmt->fetchColumn();
 
-            // Xoá SKU
-            $pdo->prepare("DELETE FROM SKU WHERE ProductID = :pid")
-                ->execute([':pid' => $productId]);
+            if ($soldCount === 0) {
+                // ===== CHƯA BÁN → XÓA CỨNG =====
 
-            // Xoá Product (cascade category)
-            $pdo->prepare("DELETE FROM Product WHERE ProductID = :pid")
-                ->execute([':pid' => $productId]);
+                // Xóa sale
+                $pdo->prepare("
+                DELETE ps
+                FROM PRODUCT_SALE ps
+                JOIN SKU s ON ps.SKUID = s.SKUID
+                WHERE s.ProductID = :pid
+            ")->execute([':pid' => $productId]);
+
+                // Xóa SKU
+                $pdo->prepare("
+                DELETE FROM SKU WHERE ProductID = :pid
+            ")->execute([':pid' => $productId]);
+
+                // Xóa Product
+                $pdo->prepare("
+                DELETE FROM Product WHERE ProductID = :pid
+            ")->execute([':pid' => $productId]);
+
+                $success_message = 'Đã xóa sản phẩm (chưa từng bán)';
+            } else {
+                // ===== ĐÃ BÁN → SOFT DELETE =====
+                $pdo->prepare("
+                UPDATE SKU SET Status = 0 WHERE ProductID = :pid
+            ")->execute([':pid' => $productId]);
+
+                $pdo->prepare("
+                UPDATE Product SET Status = 0 WHERE ProductID = :pid
+            ")->execute([':pid' => $productId]);
+
+                $success_message = 'Sản phẩm đã bán → chuyển sang Ngừng bán';
+            }
 
             $pdo->commit();
-            $success_message = 'Đã xoá sản phẩm';
 
         } catch (Exception $e) {
             $pdo->rollBack();
             $error_message = $e->getMessage();
         }
     } else if ($action === 'add') {
+
         try {
             $pdo->beginTransaction();
             $productId = generateProductID($pdo);
@@ -301,24 +354,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             /* SKU */
+            $format = trim($_POST['sku_format'] ?? '');
+            if ($format === '') {
+                throw new Exception('Thiếu đặc tính SKU');
+            }
+
             $pdo->prepare("
-                                INSERT INTO SKU
-                                (SKUID, ProductID, Format, BuyPrice, SellPrice, Stock, Status)
-                                VALUES (:skuid, :pid, 'Paperback', :buy, :sell, 50, 1)
-                            ")->execute([
+                    INSERT INTO SKU
+                    (SKUID, ProductID, Format, BuyPrice, SellPrice, Stock, Status)
+                    VALUES (:skuid, :pid, :format, :buy, :sell, 50, 1)
+                ")->execute([
                         ':skuid' => $skuId,
                         ':pid' => $productId,
+                        ':format' => $format,
                         ':buy' => $price,
                         ':sell' => $price
                     ]);
 
+
             /* Sale */
             if ($salePrice) {
                 $pdo->prepare("
-        INSERT INTO PRODUCT_SALE
-        (ProductSaleID, SKUID, DiscountedPrice, StartDate, EndDate)
-        VALUES (:id, :skuid, :price, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))
-    ")->execute([
+                INSERT INTO PRODUCT_SALE
+                (ProductSaleID, SKUID, DiscountedPrice, StartDate, EndDate)
+                VALUES (:id, :skuid, :price, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY))
+            ")->execute([
                             ':id' => 'PS' . substr(uniqid(), -4),
                             ':skuid' => $skuId,
                             ':price' => $salePrice
@@ -326,8 +386,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
-            $success_message = 'Đã thêm sản phẩm';
-
+            if (isset($_GET['success'])) {
+                $success_message = 'Đã thêm sản phẩm';
+            }
             exit;
         } catch (Exception $e) {
             $pdo->rollBack();
@@ -428,6 +489,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             exit;
         } catch (Exception $e) {
+            $pdo->rollBack();
             $error_message = $e->getMessage();
         }
     }
@@ -457,6 +519,7 @@ try {
     p.ProductName,
     p.Price,
     p.CreatedDate,
+    p.Status AS ProductStatus,
     pub.PublisherName,
     GROUP_CONCAT(DISTINCT c.CategoryName) AS Categories,
     sku.SellPrice,
@@ -600,7 +663,11 @@ GROUP BY p.ProductID;
                         <?php endforeach; ?>
                     </select>
                 </div>
-
+                <div class="col-md-6">
+                    <label class="account-label">Đặc tính / Format *</label>
+                    <input type="text" name="sku_format" class="account-input w-100"
+                        placeholder="VD: Hardcover / Paperback / Bản đặc biệt" required>
+                </div>
                 <div class="col-md-4">
                     <label class="account-label" for="image">Ảnh bìa (JPEG/PNG)</label>
                     <input type="file" class="account-input w-100" id="image" name="image" accept="image/*">
@@ -640,6 +707,7 @@ GROUP BY p.ProductID;
                                 <th>NXB</th>
                                 <th>Giá</th>
                                 <th>Ngày tạo</th>
+                                <th>Trạng thái</th>
                                 <th class="text-end">Thao tác</th>
                             </tr>
                         </thead>
@@ -663,6 +731,13 @@ GROUP BY p.ProductID;
                                         <?php endif; ?>
                                     </td>
                                     <td><?php echo htmlspecialchars($p['CreatedDate']); ?></td>
+                                    <td>
+                                        <?php if ($p['ProductStatus'] == 1): ?>
+                                            <span class="badge bg-success">Đang bán</span>
+                                        <?php else: ?>
+                                            <span class="badge bg-secondary">Ngừng bán</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="text-end">
                                         <form method="POST" class="d-inline">
                                             <input type="hidden" name="action" value="delete">
@@ -820,7 +895,7 @@ GROUP BY p.ProductID;
 
                 const formData = new FormData(this);
 
-                fetch(window.location.href, {
+                fetch('admin-products.php', {
                     method: 'POST',
                     body: formData
                 })
@@ -851,7 +926,7 @@ GROUP BY p.ProductID;
 
                 const formData = new FormData(this);
 
-                fetch(window.location.href, {
+                fetch('admin-products.php', {
                     method: 'POST',
                     body: formData
                 })
@@ -978,7 +1053,7 @@ GROUP BY p.ProductID;
                         reloadFd.append('action', 'ajax_load_sku');
                         reloadFd.append('product_id', productId);
 
-                        return fetch('admin-products-ajax.php', {
+                        return fetch('admin-products.php', {
                             method: 'POST',
                             body: reloadFd
                         });
