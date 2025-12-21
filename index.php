@@ -7,55 +7,6 @@ $isLoggedIn = isset($_SESSION['user_id']);
 $currentUsername = $_SESSION['username'] ?? '';
 $currentPage = basename($_SERVER['PHP_SELF']);
 
-if (!function_exists('calculateUserRankForHome')) {
-    function calculateUserRankForHome($pdo, $user_id) {
-        $stmt = $pdo->prepare("
-            SELECT (SUM(o.TotalAmount) - COALESCE(SUM(ro.TotalRefund), 0)) as total_spent
-            FROM `Order` o
-            LEFT JOIN Returns_Order ro ON o.OrderID = ro.OrderID AND ro.Status = 'Chấp thuận'
-            WHERE o.UserID = ? AND o.Status IN ('Đã nhận', 'Trả hàng')
-        ");
-        $stmt->execute([$user_id]);
-        $total_spent = $stmt->fetch()['total_spent'] ?? 0;
-
-        if ($total_spent < 100000) return 'Member';
-        if ($total_spent < 200000) return 'Bronze';
-        if ($total_spent < 300000) return 'Silver';
-        if ($total_spent < 400000) return 'Gold';
-        return 'Platinum';
-    }
-}
-
-$has_new_voucher = false; // Biến cờ để hiển thị thông báo
-
-if (isset($_SESSION['user_id'])) {
-    $user_id_home = $_SESSION['user_id'];
-    
-    // 2. Tính Rank hiện tại
-    $current_tier = calculateUserRankForHome($pdo, $user_id_home);
-
-    // 3. Kiểm tra xem có voucher nào (Rank hiện tại HOẶC Free) mà user CHƯA CÓ trong User_Voucher không
-    // Chỉ đếm những voucher còn hạn, còn lượt sử dụng và đang Active
-    $stmtCheck = $pdo->prepare("
-        SELECT COUNT(*) 
-        FROM Voucher v
-        WHERE (v.RankRequirement = ? OR v.RankRequirement = 'Free')
-        AND v.Status = 1
-        AND (v.EndDate IS NULL OR v.EndDate > NOW())
-        AND v.UsedCount < v.UsageLimit
-        AND v.VoucherID NOT IN (
-            SELECT uv.VoucherID FROM User_Voucher uv WHERE uv.UserID = ?
-        )
-    ");
-    
-    $stmtCheck->execute([$current_tier, $user_id_home]);
-    $count_new = $stmtCheck->fetchColumn();
-
-    if ($count_new > 0) {
-        $has_new_voucher = true;
-    }
-}
-
 // Helper nav active
 if (!function_exists('nav_active')) {
     function nav_active(string $page, string $currentPage): string
@@ -255,7 +206,9 @@ try {
                         class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
                         Về chúng tôi
                     </a>
-                    
+                    <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
+                        Chính sách
+                    </a>
                 </nav>
             </div>
 
@@ -287,42 +240,6 @@ try {
 
     <!-- ===================== MAIN ===================== -->
     <main class="home-main">
-        <?php if ($has_new_voucher): ?>
-            <div class="position-fixed bottom-0 end-0 p-4" style="z-index: 1100">
-                <div id="voucherToast" class="toast voucher-toast-custom text-white align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
-                    <div class="d-flex p-2 align-items-center">
-                        <div class="p-2">
-                            <div class="voucher-icon-box">
-                                🎁
-                            </div>
-                        </div>
-                        
-                        <div class="toast-body ps-1">
-                            <h6 class="mb-0 fw-bold">Quà tặng mới!</h6>
-                            <small class="text-white-50">Bạn nhận được <?php echo $count_new; ?> voucher.</small> <br>
-                            <small class="text-white-50">Vô Voucher & Đổi điểm trong tài khoản để nhận ngay</small>
-                        </div>
-
-                        <div class="pe-2">
-                            <a href="account-index.php?section=voucher" class="btn-voucher-action shadow-sm">
-                                Nhận
-                            </a>
-                        </div>
-                        
-                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                    </div>
-                </div>
-            </div>
-
-            <script>
-                document.addEventListener('DOMContentLoaded', function () {
-                    var voucherToast = document.getElementById('voucherToast');
-                    // Thêm animation: true và autohide: false nếu muốn nó hiện mãi đến khi bấm tắt
-                    var toast = new bootstrap.Toast(voucherToast, { delay: 10000 }); 
-                    toast.show();
-                });
-            </script>
-        <?php endif; ?>
 
         <!-- ===== BANNER ===== -->
         <?php if (!empty($banners)): ?>
@@ -516,9 +433,6 @@ try {
                                                 <span class="product-old-price">
                                                     <?php echo format_price($p['MaxOriginalPrice']); ?>
                                                 </span>
-
-                                                <span class="product-badge-sale">Sale</span>
-
                                             <?php else: ?>
                                                 <?php if ($p['MinDisplayPrice'] == $p['MaxOriginalPrice']): ?>
                                                     <span class="product-price">
