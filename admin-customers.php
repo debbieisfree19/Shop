@@ -227,7 +227,7 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <td><?= $c['Points'] ?></td>
                                 <td><?= number_format($c['TotalSpent'], 0, ',', '.') ?> đ</td>
                                 <td>
-                                    <span class="badge badge-rank <?= strtolower($c['RankName']) ?>">
+                                    <span class="badge-rank <?= strtolower($c['RankName']) ?>">
                                         <?= $c['RankName'] ?>
                                     </span>
                                 </td>
@@ -389,3 +389,4 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     </script>
 </body>
+
