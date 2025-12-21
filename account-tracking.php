@@ -37,7 +37,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         WHERE OrderID = ? AND UserID = ? AND Status = 'Chờ xác nhận'
     ");
     if ($stmt_cancel->execute([$cancel_reason, $order_id_cancel, $user_id])) {
-        header("Refresh:0"); 
         exit;
     }
 }
