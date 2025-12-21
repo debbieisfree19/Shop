@@ -1,6 +1,113 @@
 <?php
 require_once 'db_connect.php';
 $currentUserId = null;
+function generateUserVoucherId(PDO $pdo)
+{
+    $stmt = $pdo->query("
+        SELECT MAX(CAST(SUBSTRING(ID, 2) AS UNSIGNED))
+        FROM User_Voucher
+        WHERE ID LIKE 'V%'
+    ");
+    $next = ((int) $stmt->fetchColumn()) + 1;
+    return 'V' . str_pad($next, 5, '0', STR_PAD_LEFT);
+}
+
+// ================= GÁN VOUCHER =================
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['ajax'] ?? '') === 'assign_voucher'
+) {
+    header('Content-Type: application/json; charset=utf-8');
+    if (ob_get_length())
+        ob_clean();
+
+    try {
+        $uid = $_POST['user_id'] ?? '';
+        $vid = $_POST['voucher_id'] ?? '';
+
+        if ($uid === '' || $vid === '') {
+            throw new Exception('Thiếu user_id hoặc voucher_id');
+        }
+
+        // check trùng
+        $check = $pdo->prepare("
+            SELECT COUNT(*) FROM User_Voucher
+            WHERE UserID = ? AND VoucherID = ?
+        ");
+        $check->execute([$uid, $vid]);
+
+        if ($check->fetchColumn() > 0) {
+            throw new Exception('Khách đã có voucher này');
+        }
+
+        // INSERT
+        $newId = generateUserVoucherId($pdo);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO User_Voucher (ID, UserID, VoucherID, DateReceived)
+            VALUES (?, ?, ?, NOW())
+        ");
+
+        $stmt->execute([$newId, $uid, $vid]);
+
+        // kiểm tra thật sự có insert không
+        if ($stmt->rowCount() !== 1) {
+            throw new Exception('Insert không thành công (rowCount = 0)');
+        }
+
+        // update voucher
+        $pdo->prepare("
+            UPDATE Voucher
+            SET UsedCount = UsedCount + 1
+            WHERE VoucherID = ?
+        ")->execute([$vid]);
+
+        echo json_encode(['success' => true]);
+        exit;
+
+    } catch (Throwable $e) {
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+        exit;
+    }
+}
+
+// ================= XÓA VOUCHER CỦA USER =================
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['ajax'])
+    && $_POST['ajax'] === 'remove_voucher'
+) {
+    if (ob_get_length())
+        ob_clean();
+    $uid = $_POST['user_id'] ?? '';
+    $vid = $_POST['voucher_id'] ?? '';
+    header('Content-Type: application/json; charset=utf-8');
+    if ($uid === '' || $vid === '') {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Thiếu dữ liệu']);
+        exit;
+    }
+
+    try {
+        $stmt = $pdo->prepare("
+            DELETE FROM User_Voucher
+            WHERE UserID = ? AND VoucherID = ?
+        ");
+        $stmt->execute([$uid, $vid]);
+
+
+        echo json_encode(['success' => true]);
+        exit;
+
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        exit;
+    }
+}
 // ================= LOAD VOUCHER CỦA USER =================
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'load_voucher') {
 
@@ -59,79 +166,6 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'load_voucher') {
     echo "</ul>";
     exit;
 }
-// ================= GÁN VOUCHER =================
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_POST['ajax'])
-    && $_POST['ajax'] === 'assign_voucher'
-) {
-    $uid = $_POST['user_id'] ?? '';
-    $vid = $_POST['voucher_id'] ?? '';
-
-    if ($uid === '' || $vid === '') {
-        echo json_encode(['success' => false, 'message' => 'Thiếu dữ liệu']);
-        exit;
-    }
-
-    $check = $pdo->prepare("
-        SELECT COUNT(*) FROM User_Voucher
-        WHERE UserID = ? AND VoucherID = ?
-    ");
-    $check->execute([$uid, $vid]);
-
-    if ($check->fetchColumn() > 0) {
-        echo json_encode(['success' => false, 'message' => 'Khách đã có voucher này']);
-        exit;
-    }
-    $newId = uniqid(prefix: 'UV_');
-    $pdo->prepare(query: "
-        INSERT INTO User_Voucher (ID, UserID, VoucherID, DateReceived)
-        VALUES (?, ?, ?, NOW())
-    ")->execute([$newId, $uid, $vid]);
-
-    $pdo->prepare("
-        UPDATE Voucher SET UsedCount = UsedCount + 1
-        WHERE VoucherID = ?
-    ")->execute([$vid]);
-    header('Content-Type: application/json');
-    echo json_encode(['success' => true]);
-    exit;
-}
-// ================= XÓA VOUCHER CỦA USER =================
-if (
-    $_SERVER['REQUEST_METHOD'] === 'POST'
-    && isset($_POST['ajax'])
-    && $_POST['ajax'] === 'remove_voucher'
-) {
-    if (ob_get_length())
-        ob_clean();
-    $uid = $_POST['user_id'] ?? '';
-    $vid = $_POST['voucher_id'] ?? '';
-    header('Content-Type: application/json; charset=utf-8');
-    if ($uid === '' || $vid === '') {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Thiếu dữ liệu']);
-        exit;
-    }
-
-    try {
-        $stmt = $pdo->prepare("
-            DELETE FROM User_Voucher
-            WHERE UserID = ? AND VoucherID = ?
-        ");
-        $stmt->execute([$uid, $vid]);
-
-
-        echo json_encode(['success' => true]);
-        exit;
-
-    } catch (Exception $e) {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
-        exit;
-    }
-}
-
 
 // Lấy danh sách customer + điểm + rank
 $sql = "
@@ -286,7 +320,7 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?php endforeach; ?>
                         </select>
 
-                        <button class="btn btn-success mt-3">
+                        <button type="submit" class="btn btn-success mt-3">
                             ➕ Gán voucher
                         </button>
                     </form>
@@ -317,7 +351,6 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
         // gán voucher
         document.getElementById('addVoucherForm').addEventListener('submit', function (e) {
             e.preventDefault();
-
             const formData = new FormData(this);
             formData.append('ajax', 'assign_voucher');
 
@@ -329,13 +362,12 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 .then(data => {
                     if (data.success) {
                         alert('Đã gán voucher thành công');
-
-                        
-                        loadVoucherList(currentUsserId);
-                        return;
+                        loadVoucherList(currentUserId);
+                    } else {
+                        alert(data.message || 'Gán voucher thất bại');
                     }
-
                 });
+
         });
         //reload voucher
         function loadVoucherList(userId) {
@@ -389,4 +421,3 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     </script>
 </body>
-
