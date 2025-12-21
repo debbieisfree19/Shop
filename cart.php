@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qty'])) {
     foreach ($_POST['qty'] as $cartItemId => $qty) {
         $qty = max(1, (int) $qty);
 
-        // Lấy giá hiện tại của SKU (sale hay không)
+        // Lấy giá hiện tại của SKU
         $priceStmt = $pdo->prepare("
             SELECT
                 s.SellPrice AS UnitPrice,
@@ -77,20 +77,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qty'])) {
         $price = $priceStmt->fetch(PDO::FETCH_ASSOC);
 
         if ($price) {
-            $pdo->prepare("
-                UPDATE Cart_Items
-                SET Quantity = :q,
-                    UnitPrice = :unit,
-                    DiscountedPrice = :final,
-                    TotalPrice = :q * :final
-                WHERE CartItemID = :cid
-            ")->execute([
-                        ':q' => $qty,
-                        ':unit' => $price['UnitPrice'],
-                        ':final' => $price['FinalPrice'],
-                        ':cid' => $cartItemId
-                    ]);
-        }
+                $unit  = (float)$price['UnitPrice'];
+                $final = (float)$price['FinalPrice'];
+                $total = $qty * $final;
+
+                $pdo->prepare("
+                    UPDATE Cart_Items
+                    SET Quantity = :q,
+                        UnitPrice = :unit,
+                        DiscountedPrice = :final,
+                        TotalPrice = :total
+                    WHERE CartItemID = :cid
+                ")->execute([
+                    ':q'     => $qty,
+                    ':unit'  => $unit,
+                    ':final' => $final,
+                    ':total' => $total,
+                    ':cid'   => $cartItemId
+                ]);
+            }
+
     }
     header('Location: cart.php');
     exit;
@@ -210,9 +216,7 @@ foreach ($items as $i) {
 
             <?php if (empty($items)): ?>
                 <div class="account-empty-state">
-                    <p class="account-empty-text">
-                        Giỏ hàng của bạn đang trống.
-                    </p>
+                    <p> Giỏ hàng của bạn đang trống</p>
                     <a href="shop.php" class="account-btn-save">Tiếp tục mua sắm</a>
                 </div>
             <?php else: ?>
@@ -312,15 +316,12 @@ foreach ($items as $i) {
                                     <span><?php echo number_format($cartTotal, 0, ',', '.'); ?> đ</span>
                                 </div>
 
-                                <a href="checkout.php" class="account-btn-save">Thanh toán</a>
+                                <div class="cart-summary-actions">
+                                    <a href="checkout.php" class="account-btn-save cart-summary-btn">Thanh toán</a>
+                                    <a href="shop.php" class="account-btn-secondary cart-summary-btn">Tiếp tục mua sắm
+                                    </a>
+                                </div>
 
-                                <p class="cart-note">
-                                    * Phí ship & voucher sẽ được áp dụng ở bước sau.
-                                </p>
-
-                                <a href="shop.php" class="account-btn-secondary" style="width:100%;text-align:center;">
-                                    Tiếp tục mua sắm
-                                </a>
                             </div>
                         </aside>
 

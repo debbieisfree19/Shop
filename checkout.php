@@ -1,13 +1,10 @@
 <?php
 /**
  * MOONLIT STORE - CHECKOUT PAGE (DB CART + VOUCHER + CARRIER)
- * - Load cart từ DB: Cart + Cart_Items
- * - Chọn Carrier (CarrierID) -> cộng ShippingPrice
- * - Áp voucher bằng Code (bảng Voucher)
- * - Lưu Order/Order_Items/Shipping_Order/User_Voucher thật khi đặt hàng
  */
 
 session_start();
+date_default_timezone_set('Asia/Ho_Chi_Minh');
 require_once 'db_connect.php';
 
 /* =========================
@@ -28,6 +25,40 @@ if (!function_exists('nav_active')) {
     function nav_active(string $page, string $currentPage): string {
         return $page === $currentPage ? 'nav-active' : '';
     }
+}
+
+/* =========================
+   LOAD USER PROFILE (prefill address)
+========================= */
+$userProfile = [
+    'FullName' => $currentUsername,
+    'Email' => '',
+    'Phone' => '',
+    'ShippingCity' => '',
+    'ShippingDistrict' => '',
+    'ShippingWard' => '',
+    'ShippingStreet' => '',
+    'ShippingNumber' => '',
+];
+
+try {
+    
+    $uStmt = $pdo->prepare("
+        SELECT
+            FullName, Email, Phone,
+            ShippingCity, ShippingDistrict, ShippingWard, ShippingStreet, ShippingNumber
+        FROM User_Account
+        WHERE UserID = :uid
+        LIMIT 1
+    ");
+    $uStmt->execute([':uid' => $userId]);
+    $row = $uStmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
+        $userProfile = array_merge($userProfile, array_filter($row, fn($v) => $v !== null));
+        if (!empty($userProfile['FullName'])) $currentUsername = $userProfile['FullName'];
+    }
+} catch (Exception $e) {
+    
 }
 
 /* =========================
@@ -108,7 +139,7 @@ function gen_id6(): string {
 }
 
 /* =========================
-   READ USER INPUT (GET/POST)
+   READ USER INPUT 
 ========================= */
 $form_errors = [];
 $success_msg = '';
@@ -135,7 +166,7 @@ if (!$selectedCarrier && !empty($carriers)) {
 }
 
 /* =========================
-   APPLY VOUCHER (by Code)
+   APPLY VOUCHER
 ========================= */
 $voucher = null;
 $voucherError = '';
@@ -198,13 +229,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     $full_name = trim($_POST['full_name'] ?? '');
     $email     = trim($_POST['email'] ?? '');
     $phone     = trim($_POST['phone'] ?? '');
-    $address   = trim($_POST['address'] ?? '');
     $note      = trim($_POST['note'] ?? '');
     $payment   = trim($_POST['payment_method'] ?? 'cod');
 
+
+    $shippingCity     = trim($_POST['shipping_city'] ?? '');
+    $shippingDistrict = trim($_POST['shipping_district'] ?? '');
+    $shippingWard     = trim($_POST['shipping_ward'] ?? '');
+    $shippingStreet   = trim($_POST['shipping_street'] ?? '');
+    $shippingNumber   = trim($_POST['shipping_number'] ?? '');
+
     if ($full_name === '') $form_errors[] = 'Vui lòng nhập họ và tên.';
     if ($phone === '')     $form_errors[] = 'Vui lòng nhập số điện thoại.';
-    if ($address === '')   $form_errors[] = 'Vui lòng nhập địa chỉ nhận hàng.';
+
+    if ($shippingCity === '')     $form_errors[] = 'Vui lòng chọn Tỉnh/Thành phố.';
+    if ($shippingDistrict === '') $form_errors[] = 'Vui lòng chọn Quận/Huyện.';
+    if ($shippingWard === '')     $form_errors[] = 'Vui lòng chọn Phường/Xã.';
+    if ($shippingStreet === '')   $form_errors[] = 'Vui lòng nhập Tên đường.';
+    if ($shippingNumber === '')   $form_errors[] = 'Vui lòng nhập Số nhà.';
+
     if (empty($products))  $form_errors[] = 'Giỏ hàng trống, không thể đặt hàng.';
     if (!$selectedCarrierId) $form_errors[] = 'Vui lòng chọn đơn vị vận chuyển.';
 
@@ -216,10 +259,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         try {
             $pdo->beginTransaction();
 
-            // 0) re-check cart still exists (chống bấm 2 lần / tab khác xóa)
+            // 0) re-check cart still exists
             $cartCheck = $pdo->prepare("
-                SELECT COUNT(*) 
-                FROM Cart c 
+                SELECT COUNT(*)
+                FROM Cart c
                 JOIN Cart_Items ci ON c.CartID = ci.CartID
                 WHERE c.UserID = :uid
             ");
@@ -231,13 +274,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 
             // 1) insert Order
             $orderId = gen_id6();
-
-            // Bảng Order bắt buộc các field shipping -> tạm nhét address vào ShippingStreet
-            $shippingCity     = '';
-            $shippingDistrict = '';
-            $shippingWard     = '';
-            $shippingStreet   = $address;
-            $shippingNumber   = '';
 
             $insOrder = $pdo->prepare("
                 INSERT INTO `Order` (
@@ -269,7 +305,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':note'         => $note,
             ]);
 
-            // 2) insert Order_Items (copy từ cart)
+            // 2) insert Order_Items
             $insItem = $pdo->prepare("
                 INSERT INTO Order_Items (OrderID, SKU_ID, Quantity, UnitPrice, DiscountedPrice, TotalPrice)
                 VALUES (:oid, :skuid, :qty, :u, :d, :t)
@@ -286,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ]);
             }
 
-            // 3) insert Shipping_Order (gắn Carrier)
+            // 3) insert Shipping_Order
             $shippingId = gen_id6();
             $insShip = $pdo->prepare("
                 INSERT INTO Shipping_Order (
@@ -304,7 +340,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':status' => 'Pending'
             ]);
 
-            // 4) nếu có voucher hợp lệ -> lưu User_Voucher + tăng UsedCount
+            // 4) voucher 
             if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
                 $uvId = gen_id6();
                 $pdo->prepare("
@@ -352,6 +388,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         }
     }
 }
+
+$prefill_city     = $_POST['shipping_city'] ?? ($userProfile['ShippingCity'] ?? '');
+$prefill_district = $_POST['shipping_district'] ?? ($userProfile['ShippingDistrict'] ?? '');
+$prefill_ward     = $_POST['shipping_ward'] ?? ($userProfile['ShippingWard'] ?? '');
+$prefill_street   = $_POST['shipping_street'] ?? ($userProfile['ShippingStreet'] ?? '');
+$prefill_number   = $_POST['shipping_number'] ?? ($userProfile['ShippingNumber'] ?? '');
+
+$prefill_phone = $_POST['phone'] ?? ($userProfile['Phone'] ?? '');
+$prefill_email = $_POST['email'] ?? ($userProfile['Email'] ?? '');
+$prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUsername);
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -365,60 +411,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 
 <body class="account-body">
 
-<!-- ===================== HEADER ===================== -->
-    <header class="account-header site-header">
-        <div class="container header-inner">
-            <div class="header-left">
-                <a href="index.php" class="logo-link header-logo">
-                    <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
+<header class="account-header site-header">
+    <div class="container header-inner">
+        <div class="header-left">
+            <a href="index.php" class="logo-link header-logo">
+                <img src="img/image.png?v=2" alt="Moonlit logo" class="logo-img">
+            </a>
 
-                </a>
-
-                <nav class="header-menu">
-                    <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">
-                        Trang chủ
-                    </a>
-                    <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">
-                        Cửa hàng
-                    </a>
-                    <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">
-                        Moonlit Forum
-                    </a>
-                    <a href="aboutus.php"
-                        class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">
-                        Về chúng tôi
-                    </a>
-                    <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">
-                        Chính sách
-                    </a>
-                </nav>
-            </div>
-
-            <div class="header-right">
-                <form method="GET" action="shop.php" class="header-search-form">
-                    <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
-                    <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
-                </form>
-
-                <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
-
-                <?php if ($isLoggedIn): ?>
-                    <div class="header-account">
-                        <div class="header-account-actions">
-                            <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
-                            <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
-                        </div>
-
-                        <span class="account-username">
-                            Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
-                        </span>
-                    </div>
-                <?php else: ?>
-                    <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
-                <?php endif; ?>
-            </div>
+            <nav class="header-menu">
+                <a href="index.php" class="header-menu-link <?php echo nav_active('index.php', $currentPage); ?>">Trang chủ</a>
+                <a href="shop.php" class="header-menu-link <?php echo nav_active('shop.php', $currentPage); ?>">Cửa hàng</a>
+                <a href="forum.php" class="header-menu-link <?php echo nav_active('forum.php', $currentPage); ?>">Moonlit Forum</a>
+                <a href="aboutus.php" class="header-menu-link <?php echo nav_active('aboutus.php', $currentPage); ?>">Về chúng tôi</a>
+                <a href="policy.php" class="header-menu-link <?php echo nav_active('policy.php', $currentPage); ?>">Chính sách</a>
+            </nav>
         </div>
-    </header>
+
+        <div class="header-right">
+            <form method="GET" action="shop.php" class="header-search-form">
+                <input type="text" name="q" class="account-input header-search-input" placeholder="Tìm sách...">
+                <button type="submit" class="account-btn-save header-search-btn">Tìm</button>
+            </form>
+
+            <a href="cart.php" class="account-btn-secondary header-cart-btn">Giỏ hàng</a>
+
+            <?php if ($isLoggedIn): ?>
+                <div class="header-account">
+                    <div class="header-account-actions">
+                        <a href="account-index.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+                        <a href="logout.php" class="account-btn-secondary header-account-btn">Đăng xuất</a>
+                    </div>
+
+                    <span class="account-username">
+                        Xin chào, <strong><?php echo htmlspecialchars($currentUsername); ?></strong>
+                    </span>
+                </div>
+            <?php else: ?>
+                <a href="auth-login.php" class="account-btn-secondary header-account-btn">Tài khoản</a>
+            <?php endif; ?>
+        </div>
+    </div>
+</header>
 
 <main class="account-main checkout-main">
     <div class="container">
@@ -455,41 +488,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 
             <div class="checkout-layout">
 
-                <!-- LEFT: FORM -->
                 <section class="checkout-form-section">
                     <div class="account-card checkout-form-card">
                         <h2 class="checkout-section-title">Thông tin nhận hàng</h2>
 
-                        <form method="POST" class="checkout-form">
+                        <form method="POST" class="checkout-form" id="checkoutForm">
                             <div class="checkout-form-grid">
+
                                 <div class="checkout-field">
-                                    <label for="full_name" class="account-label">Họ và tên *</label>
-                                    <input type="text" id="full_name" name="full_name" class="account-input"
-                                           value="<?php echo htmlspecialchars($_POST['full_name'] ?? $currentUsername); ?>" required>
+                                    <label class="account-label">Họ và tên *</label>
+                                    <input type="text" name="full_name" class="account-input"
+                                           value="<?php echo htmlspecialchars($prefill_name); ?>" required>
                                 </div>
 
                                 <div class="checkout-field">
-                                    <label for="email" class="account-label">Email</label>
-                                    <input type="email" id="email" name="email" class="account-input"
-                                           value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>">
+                                    <label class="account-label">Email</label>
+                                    <input type="email" name="email" class="account-input"
+                                           value="<?php echo htmlspecialchars($prefill_email); ?>">
                                 </div>
 
                                 <div class="checkout-field">
-                                    <label for="phone" class="account-label">Số điện thoại *</label>
-                                    <input type="text" id="phone" name="phone" class="account-input"
-                                           value="<?php echo htmlspecialchars($_POST['phone'] ?? ''); ?>" required>
+                                    <label class="account-label">Số điện thoại *</label>
+                                    <input type="text" name="phone" class="account-input"
+                                           value="<?php echo htmlspecialchars($prefill_phone); ?>" required>
+                                </div>
+
+                                <!-- DROPDOWN ADDRESS -->
+                                <div class="checkout-field">
+                                    <label class="account-label">Tỉnh / Thành phố *</label>
+                                    <select name="shipping_city" id="citySelect" class="account-input" required>
+                                        <option value="">Chọn Tỉnh/Thành phố</option>
+                                    </select>
+                                </div>
+
+                                <div class="checkout-field">
+                                    <label class="account-label">Quận / Huyện *</label>
+                                    <select name="shipping_district" id="districtSelect" class="account-input" required disabled>
+                                        <option value="">Chọn Quận/Huyện</option>
+                                    </select>
+                                </div>
+
+                                <div class="checkout-field">
+                                    <label class="account-label">Phường / Xã *</label>
+                                    <select name="shipping_ward" id="wardSelect" class="account-input" required disabled>
+                                        <option value="">Chọn Phường/Xã</option>
+                                    </select>
                                 </div>
 
                                 <div class="checkout-field checkout-field-full">
-                                    <label for="address" class="account-label">Địa chỉ nhận hàng *</label>
-                                    <textarea id="address" name="address" class="account-input checkout-textarea" rows="3" required><?php
-                                        echo htmlspecialchars($_POST['address'] ?? '');
-                                    ?></textarea>
+                                    <label class="account-label">Tên đường *</label>
+                                    <input type="text" name="shipping_street" class="account-input"
+                                           value="<?php echo htmlspecialchars($prefill_street); ?>" required>
                                 </div>
 
                                 <div class="checkout-field checkout-field-full">
-                                    <label for="note" class="account-label">Ghi chú cho đơn hàng</label>
-                                    <textarea id="note" name="note" class="account-input checkout-textarea" rows="3"><?php
+                                    <label class="account-label">Số nhà *</label>
+                                    <input type="text" name="shipping_number" class="account-input"
+                                           value="<?php echo htmlspecialchars($prefill_number); ?>" required>
+                                </div>
+
+                                <div class="checkout-field checkout-field-full">
+                                    <label class="account-label">Ghi chú cho đơn hàng</label>
+                                    <textarea name="note" class="account-input checkout-textarea" rows="3"><?php
                                         echo htmlspecialchars($_POST['note'] ?? '');
                                     ?></textarea>
                                 </div>
@@ -498,10 +558,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                                 <div class="checkout-field checkout-field-full">
                                     <label class="account-label mb-1">Đơn vị vận chuyển</label>
                                     <?php if (empty($carriers)): ?>
-                                        <div class="small text-secondary">Chưa có dữ liệu Carrier. Thêm vài hãng ship trong bảng Carrier nha.</div>
+                                        <div class="small text-secondary">Chưa có dữ liệu Carrier.</div>
                                         <input type="hidden" name="carrier_id" value="">
                                     <?php else: ?>
-                                        <select name="carrier_id" class="account-input" required>
+                                        <select name="carrier_id" id="carrierSelect" class="account-input" required>
                                             <?php foreach ($carriers as $c): ?>
                                                 <option value="<?php echo htmlspecialchars($c['CarrierID']); ?>"
                                                     <?php echo ($selectedCarrierId === $c['CarrierID']) ? 'selected' : ''; ?>>
@@ -524,6 +584,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                                             Áp dụng
                                         </button>
                                     </div>
+
                                     <?php if ($voucherCodeInput !== ''): ?>
                                         <?php if ($voucherError !== ''): ?>
                                             <div class="small text-danger mt-1"><?php echo htmlspecialchars($voucherError); ?></div>
@@ -550,7 +611,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                                             <span>Chuyển khoản ngân hàng</span>
                                         </label>
                                     </div>
+
+                                    <!-- BANK TRANSFER INFO -->
+                                    <div id="bankTransferBox" class="mt-3" style="display:none;">
+                                    <div class="p-3 rounded" style="border:1px solid #e6e6e6; background:#fff;">
+                                        <div class="d-flex flex-wrap gap-3 align-items-start">
+                                        
+                                        <div style="min-width: 180px;">
+                                            <img
+                                            src="img/QR Code.png"
+                                            alt="QR chuyển khoản"
+                                            style="width:180px; height:180px; object-fit:contain; border:1px solid #f0f0f0; border-radius:12px; padding:8px; background:#fff;"
+                                            >
+                                            <div class="small text-secondary mt-2">Quét QR để chuyển khoản</div>
+                                        </div>
+
+                                        <div style="flex:1; min-width: 260px;">
+                                            <h6 class="mb-2">Hướng dẫn thanh toán chuyển khoản</h6>
+
+                                            <div class="small mb-1"><strong>Ngân hàng:</strong> Vietcombank</div>
+                                            <div class="small mb-1"><strong>Số tài khoản:</strong> 0123 456 789</div>
+                                            <div class="small mb-1"><strong>Chủ tài khoản:</strong> MOONLIT STORE</div>
+                                            <div class="small mb-2"><strong>Số tiền:</strong> <span id="bankAmountText"><?php echo number_format((float)$grandTotal, 0, ',', '.'); ?> đ</span></div>
+
+                                            <div class="small">
+                                            <strong>Nội dung chuyển khoản:</strong>
+                                            <span id="bankContentText">MOONLIT <?php echo htmlspecialchars($userId); ?></span>
+                                            </div>
+
+                                            <div class="small text-secondary mt-2">
+                                            Sau khi chuyển khoản, Moonlit sẽ xác nhận và xử lý đơn hàng sớm nhất 💙
+                                            </div>
+                                        </div>
+
+                                        </div>
+                                    </div>
+                                    </div>
+
                                 </div>
+
                             </div>
 
                             <button type="submit" name="place_order" value="1" class="account-btn-save checkout-submit-btn">
@@ -560,7 +659,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                     </div>
                 </section>
 
-                <!-- RIGHT: SUMMARY -->
                 <aside class="checkout-summary">
                     <div class="account-card cart-summary-card">
                         <h2 class="cart-summary-title">Đơn hàng của bạn</h2>
@@ -604,9 +702,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                             <span><?php echo number_format((float)$grandTotal, 0, ',', '.'); ?> đ</span>
                         </div>
 
-                        <p class="cart-note">
-                            * Đã lưu Order/Order_Items/Shipping_Order. Tổng thanh toán hiển thị gồm ship, còn bảng `Order` lưu tiền hàng (trước & sau voucher).
-                        </p>
                     </div>
                 </aside>
 
@@ -617,56 +712,199 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 </main>
 
 <footer class="site-footer">
-        <div class="container footer-grid">
-
-            <!-- COL 1 -->
-            <div class="footer-col">
-                <h4>Moonlit</h4>
-                <p class="footer-desc">
-                    Hiệu sách trực tuyến dành cho những tâm hồn yêu đọc.
-                    Chúng tôi tin mỗi cuốn sách đều có ánh trăng riêng 🌙
-                </p>
-            </div>
-
-            <!-- COL 2 -->
-            <div class="footer-col">
-                <h4>Liên kết</h4>
-                <ul>
-                    <li><a href="index.php">Trang chủ</a></li>
-                    <li><a href="shop.php">Cửa hàng</a></li>
-                    <li><a href="forum.php">Moonlit Forum</a></li>
-                    <li><a href="aboutus.php">Về chúng tôi</a></li>
-                </ul>
-            </div>
-
-            <!-- COL 3 -->
-            <div class="footer-col">
-                <h4>Blog & Nội dung</h4>
-                <ul>
-                    <li><a href="blogs.php">Blog Moonlit</a></li>
-                    <li><a href="blogs.php">Review sách</a></li>
-                    <li><a href="blogs.php">Góc đọc chậm</a></li>
-                </ul>
-            </div>
-
-            <!-- COL 4 -->
-            <div class="footer-col">
-                <h4>Chính sách</h4>
-                <ul>
-                    <li><a href="policy.php">Chính sách mua hàng</a></li>
-                    <li><a href="policy.php">Bảo mật thông tin</a></li>
-                    <li><a href="policy.php">Điều khoản sử dụng</a></li>
-                    <li><a href="contact_us.php">Liên hệ</a></li>
-                </ul>
-            </div>
-
+    <div class="container footer-grid">
+        <div class="footer-col">
+            <h4>Moonlit</h4>
+            <p class="footer-desc">
+                Hiệu sách trực tuyến dành cho những tâm hồn yêu đọc.
+                Chúng tôi tin mỗi cuốn sách đều có ánh trăng riêng 🌙
+            </p>
         </div>
-
-        <div class="footer-bottom">
-            © 2025 Moonlit — All rights reserved.
+        <div class="footer-col">
+            <h4>Liên kết</h4>
+            <ul>
+                <li><a href="index.php">Trang chủ</a></li>
+                <li><a href="shop.php">Cửa hàng</a></li>
+                <li><a href="forum.php">Moonlit Forum</a></li>
+                <li><a href="aboutus.php">Về chúng tôi</a></li>
+            </ul>
         </div>
-    </footer>
+        <div class="footer-col">
+            <h4>Blog & Nội dung</h4>
+            <ul>
+                <li><a href="blogs.php">Blog Moonlit</a></li>
+                <li><a href="blogs.php">Review sách</a></li>
+                <li><a href="blogs.php">Góc đọc chậm</a></li>
+            </ul>
+        </div>
+        <div class="footer-col">
+            <h4>Chính sách</h4>
+            <ul>
+                <li><a href="policy.php">Chính sách mua hàng</a></li>
+                <li><a href="policy.php">Bảo mật thông tin</a></li>
+                <li><a href="policy.php">Điều khoản sử dụng</a></li>
+                <li><a href="contact_us.php">Liên hệ</a></li>
+            </ul>
+        </div>
+    </div>
 
+    <div class="footer-bottom">
+        © 2025 Moonlit — All rights reserved.
+    </div>
+</footer>
+
+<!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+  function toggleBankBox() {
+    const bankRadio = document.querySelector('input[name="payment_method"][value="bank"]');
+    const bankBox = document.getElementById('bankTransferBox');
+    if (!bankRadio || !bankBox) return;
+
+    bankBox.style.display = bankRadio.checked ? 'block' : 'none';
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('input[name="payment_method"]').forEach(r => {
+      r.addEventListener('change', toggleBankBox);
+    });
+    toggleBankBox();
+  });
+</script>
+
+
+<!-- Prefill values from PHP -->
+<script>
+  const PREFILL = {
+    city: <?php echo json_encode($prefill_city); ?>,
+    district: <?php echo json_encode($prefill_district); ?>,
+    ward: <?php echo json_encode($prefill_ward); ?>
+  };
+</script>
+
+<!-- Address dropdown loader -->
+<script>
+  const citySelect = document.getElementById('citySelect');
+  const districtSelect = document.getElementById('districtSelect');
+  const wardSelect = document.getElementById('wardSelect');
+
+  async function fetchJSON(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Fetch failed: ' + url);
+    return await res.json();
+  }
+
+  function resetSelect(sel, placeholder) {
+    sel.innerHTML = `<option value="">${placeholder}</option>`;
+  }
+
+  function setEnabled(sel, enabled) {
+    sel.disabled = !enabled;
+  }
+
+  // Load provinces
+  async function loadCities() {
+    resetSelect(citySelect, 'Chọn Tỉnh/Thành phố');
+    resetSelect(districtSelect, 'Chọn Quận/Huyện');
+    resetSelect(wardSelect, 'Chọn Phường/Xã');
+    setEnabled(districtSelect, false);
+    setEnabled(wardSelect, false);
+
+    const cities = await fetchJSON('https://provinces.open-api.vn/api/p/');
+    cities.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.name;
+      opt.dataset.code = c.code;
+      opt.textContent = c.name;
+      citySelect.appendChild(opt);
+    });
+
+    // prefill city
+    if (PREFILL.city) {
+      const opt = Array.from(citySelect.options).find(o => o.value === PREFILL.city);
+      if (opt) {
+        citySelect.value = PREFILL.city;
+        await loadDistricts(opt.dataset.code, true);
+      }
+    }
+  }
+
+  async function loadDistricts(cityCode, isPrefill = false) {
+    resetSelect(districtSelect, 'Chọn Quận/Huyện');
+    resetSelect(wardSelect, 'Chọn Phường/Xã');
+    setEnabled(districtSelect, true);
+    setEnabled(wardSelect, false);
+
+    const city = await fetchJSON(`https://provinces.open-api.vn/api/p/${cityCode}?depth=2`);
+    (city.districts || []).forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d.name;
+      opt.dataset.code = d.code;
+      opt.textContent = d.name;
+      districtSelect.appendChild(opt);
+    });
+
+    if (isPrefill && PREFILL.district) {
+      const opt = Array.from(districtSelect.options).find(o => o.value === PREFILL.district);
+      if (opt) {
+        districtSelect.value = PREFILL.district;
+        await loadWards(opt.dataset.code, true);
+      }
+    }
+  }
+
+  async function loadWards(districtCode, isPrefill = false) {
+    resetSelect(wardSelect, 'Chọn Phường/Xã');
+    setEnabled(wardSelect, true);
+
+    const district = await fetchJSON(`https://provinces.open-api.vn/api/d/${districtCode}?depth=2`);
+    (district.wards || []).forEach(w => {
+      const opt = document.createElement('option');
+      opt.value = w.name;
+      opt.textContent = w.name;
+      wardSelect.appendChild(opt);
+    });
+
+    if (isPrefill && PREFILL.ward) {
+      const opt = Array.from(wardSelect.options).find(o => o.value === PREFILL.ward);
+      if (opt) wardSelect.value = PREFILL.ward;
+    }
+  }
+
+  citySelect?.addEventListener('change', async () => {
+    const selected = citySelect.options[citySelect.selectedIndex];
+    const code = selected?.dataset?.code;
+    resetSelect(districtSelect, 'Chọn Quận/Huyện');
+    resetSelect(wardSelect, 'Chọn Phường/Xã');
+    setEnabled(districtSelect, false);
+    setEnabled(wardSelect, false);
+    if (code) await loadDistricts(code, false);
+  });
+
+  districtSelect?.addEventListener('change', async () => {
+    const selected = districtSelect.options[districtSelect.selectedIndex];
+    const code = selected?.dataset?.code;
+    resetSelect(wardSelect, 'Chọn Phường/Xã');
+    setEnabled(wardSelect, false);
+    if (code) await loadWards(code, false);
+  });
+
+  document.addEventListener('DOMContentLoaded', loadCities);
+</script>
+
+<!-- Auto refresh shipping fee when change carrier -->
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const carrierSelect = document.getElementById('carrierSelect');
+    const form = document.getElementById('checkoutForm');
+    if (!carrierSelect || !form) return;
+
+    carrierSelect.addEventListener('change', () => {
+      form.submit();
+    });
+  });
+</script>
+
 </body>
 </html>
