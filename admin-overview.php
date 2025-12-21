@@ -4,7 +4,7 @@ $orderStatuses = [
     'Đã xác nhận'  => 'Đã xác nhận / Chờ lấy hàng',
     'Đang giao'    => 'Đang giao',
     'Đã giao'      => 'Đã giao',
-    'Trả hàng'     => 'Trả hàng / Hoàn tiền',
+    'Đã hoàn tiền'     => 'Trả hàng / Hoàn tiền',
     'Bị hủy'       => 'Đã hủy',
 ];
 
@@ -13,7 +13,10 @@ $stmt = $pdo->query("
         COALESCE(SUM(TotalAmount),0) revenue,
         COUNT(*) orders
     FROM `Order`
-    WHERE Status != 'Bị hủy'
+    WHERE Status IN (
+        'Đã xác nhận',
+        'Đang giao',
+        'Đã giao')
 ");
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -54,7 +57,7 @@ $totalCustomers = (int)$pdo->query("
     </div>
     <div class="col-md-3 mb-3">
         <div class="account-card">
-            <div class="account-card-title">Số đơn hàng</div>
+            <div class="account-card-title">Số đơn hàng thành công</div>
             <p class="fw-bold" style="font-size: 20px;">
                 <?php echo (int) $totalOrders; ?>
             </p>
