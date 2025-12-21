@@ -299,7 +299,8 @@ try {
                         
                         <div class="toast-body ps-1">
                             <h6 class="mb-0 fw-bold">Quà tặng mới!</h6>
-                            <small class="text-white-50">Bạn nhận được <?php echo $count_new; ?> voucher.</small>
+                            <small class="text-white-50">Bạn nhận được <?php echo $count_new; ?> voucher.</small> <br>
+                            <small class="text-white-50">Vô Voucher & Đổi điểm trong tài khoản để nhận ngay</small>
                         </div>
 
                         <div class="pe-2">
