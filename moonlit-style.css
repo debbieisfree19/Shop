@@ -300,6 +300,51 @@ img {
     padding: 24px 0 40px;
 }
 
+.voucher-toast-custom {
+        background: linear-gradient(135deg, #0f9b0f 0%, #00b09b 100%); /* Màu chuyển xanh sang trọng */
+        border: none;
+        border-radius: 16px; /* Bo góc tròn mềm mại */
+        box-shadow: 0 8px 24px rgba(0, 176, 155, 0.4); /* Đổ bóng màu xanh */
+        overflow: hidden;
+        position: relative;
+}
+.voucher-icon-box {
+        background: rgba(255, 255, 255, 0.2);
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 24px;
+}
+.btn-voucher-action {
+        background: white;
+        color: #00b09b;
+        border-radius: 20px;
+        font-weight: 600;
+        padding: 5px 15px;
+        border: none;
+        transition: transform 0.2s;
+        text-decoration: none;
+}
+.btn-voucher-action:hover {
+        transform: scale(1.05);
+        color: #0f9b0f;
+        background: #f8f9fa;
+ }
+    /* Hiệu ứng lấp lánh nhẹ */
+.voucher-toast-custom::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+        pointer-events: none;
+}
+
 /* Banner */
 
 .home-banner {
