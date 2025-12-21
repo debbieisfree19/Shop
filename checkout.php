@@ -31,26 +31,30 @@ if (!function_exists('nav_active')) {
    LOAD USER PROFILE (prefill address)
 ========================= */
 $userProfile = [
-    'FullName' => $currentUsername,
-    'Email' => '',
-    'Phone' => '',
-    'ShippingCity' => '',
-    'ShippingDistrict' => '',
-    'ShippingWard' => '',
-    'ShippingStreet' => '',
-    'ShippingNumber' => '',
+  'FullName' => $currentUsername,
+  'Email' => '',
+  'Phone' => '',
+  'City' => '',
+  'District' => '',
+  'Ward' => '',
+  'Street' => '',
+  'HouseNumber' => '',
+  'Points' => 0,
 ];
+
 
 try {
     
     $uStmt = $pdo->prepare("
-        SELECT
-            FullName, Email, Phone,
-            ShippingCity, ShippingDistrict, ShippingWard, ShippingStreet, ShippingNumber
-        FROM User_Account
-        WHERE UserID = :uid
-        LIMIT 1
+    SELECT
+        FullName, Email, Phone,
+        City, District, Ward, Street, HouseNumber,
+        Points
+    FROM User_Account
+    WHERE UserID = :uid
+    LIMIT 1
     ");
+
     $uStmt->execute([':uid' => $userId]);
     $row = $uStmt->fetch(PDO::FETCH_ASSOC);
     if ($row) {
@@ -138,6 +142,50 @@ function gen_id6(): string {
     return strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
 }
 
+function rank_from_points(int $points): string {
+    if ($points >= 2000) return 'Bạch kim';
+    if ($points >= 1000) return 'Vàng';
+    if ($points >= 500)  return 'Bạc';
+    if ($points >= 200)  return 'Đồng';
+    return 'Chung';
+}
+$userPoints = (int)($userProfile['Points'] ?? 0);
+$customerRank = rank_from_points($userPoints);
+
+function rank_level(string $rank): int {
+    $rank = trim(mb_strtolower($rank));
+    return match ($rank) {
+        'bạch kim' => 5,
+        'vang', 'vàng' => 4,
+        'bac', 'bạc' => 3,
+        'dong', 'đồng' => 2,
+        default => 1, // Chung
+    };
+}
+
+function user_can_use_rank(string $userRank, ?string $requireRank): bool {
+    // Voucher RankRequirement NULL hoặc rỗng => coi như Chung
+    $req = trim((string)$requireRank);
+    if ($req === '') $req = 'Chung';
+    return rank_level($userRank) >= rank_level($req);
+}
+
+function gen_user_voucher_id(PDO $pdo): string {
+    // Lấy số lớn nhất đang có dạng V00001...
+    // SUBSTRING(ID,2) lấy phần số sau chữ V
+    $sql = "
+        SELECT MAX(CAST(SUBSTRING(ID, 2) AS UNSIGNED)) AS max_num
+        FROM User_Voucher
+        WHERE ID LIKE 'V%'
+    ";
+    $max = (int)($pdo->query($sql)->fetchColumn() ?? 0);
+    $next = ($max <= 0) ? 10 : ($max + 1);
+
+
+    return 'V' . str_pad((string)$next, 5, '0', STR_PAD_LEFT);
+}
+
+
 /* =========================
    READ USER INPUT 
 ========================= */
@@ -198,6 +246,8 @@ if ($voucherCodeInput !== '' && $subTotal > 0) {
             $voucherError = 'Voucher đã hết lượt sử dụng.';
         } else if ($voucher['MinOrder'] !== null && (float)$subTotal < (float)$voucher['MinOrder']) {
             $voucherError = 'Đơn hàng chưa đạt giá trị tối thiểu để dùng voucher.';
+        } else if (!user_can_use_rank($customerRank, $voucher['RankRequirement'] ?? 'Chung')) {
+            $voucherError = 'Voucher không áp dụng cho hạng khách hàng của bạn.';
         } else {
             $type  = strtolower(trim($voucher['DiscountType'] ?? ''));
             $value = (float)($voucher['DiscountValue'] ?? 0);
@@ -221,6 +271,44 @@ if ($voucherCodeInput !== '' && $subTotal > 0) {
 
 $totalAfterVoucher = max(0, $subTotal - $discountAmount);
 $grandTotal = $totalAfterVoucher + $shippingFee;
+
+$availableVouchers = [];
+
+if ($subTotal > 0) {
+    try {
+        $vListSql = "
+            SELECT
+                VoucherID, VoucherName, Code, Description,
+                DiscountType, DiscountValue, MinOrder, MaxDiscount,
+                StartDate, EndDate, UsageLimit, UsedCount, Status, RankRequirement
+            FROM Voucher
+            WHERE Status = 1
+            ORDER BY StartDate DESC
+        ";
+        $vListStmt = $pdo->query($vListSql);
+        $all = $vListStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($all as $v) {
+            // 1) thời gian
+            if (!now_in_range($v['StartDate'] ?? null, $v['EndDate'] ?? null)) continue;
+
+            // 2) limit dùng
+            if ($v['UsageLimit'] !== null && $v['UsedCount'] !== null
+                && (int)$v['UsedCount'] >= (int)$v['UsageLimit']) continue;
+
+            // 3) min order
+            if ($v['MinOrder'] !== null && (float)$subTotal < (float)$v['MinOrder']) continue;
+
+            // 4) rank
+            if (!user_can_use_rank($customerRank, $v['RankRequirement'] ?? 'Chung')) continue;
+
+            $availableVouchers[] = $v;
+        }
+    } catch (Exception $e) {
+        $availableVouchers = [];
+    }
+}
+
 
 /* =========================
    SUBMIT ORDER (SAVE REAL)
@@ -343,6 +431,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
             // 4) voucher 
             if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
                 $uvId = gen_id6();
+                // tạo ID kiểu V00010
+                $uvId = gen_user_voucher_id($pdo);
+
                 $pdo->prepare("
                     INSERT INTO User_Voucher (ID, UserID, VoucherID, OrderID, DateReceived)
                     VALUES (:id, :uid, :vid, :oid, NOW())
@@ -352,6 +443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                     ':vid' => $voucher['VoucherID'],
                     ':oid' => $orderId
                 ]);
+
 
                 $pdo->prepare("
                     UPDATE Voucher
@@ -575,26 +667,53 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
                                 <!-- VOUCHER -->
                                 <div class="checkout-field checkout-field-full">
                                     <label class="account-label mb-1">Voucher</label>
+
                                     <div class="d-flex gap-2 flex-wrap">
-                                        <input type="text" name="voucher_code" class="account-input"
-                                               placeholder="Nhập mã (VD: MOON10)"
-                                               value="<?php echo htmlspecialchars($voucherCodeInput); ?>"
-                                               style="flex: 1; min-width: 220px;">
+                                        <select name="voucher_code" class="account-input" style="flex: 1; min-width: 220px;">
+                                        <option value="">-- Chọn voucher (có thể áp dụng) --</option>
+
+                                        <?php foreach ($availableVouchers as $v): ?>
+                                            <?php
+                                            $type = strtolower(trim($v['DiscountType'] ?? ''));
+                                            if ($type === 'percent' || $type === 'percentage') {
+                                                $desc = 'Giảm ' . rtrim(rtrim((string)$v['DiscountValue'], '0'), '.') . '%';
+                                            } else {
+                                                $desc = 'Giảm ' . number_format((float)$v['DiscountValue'], 0, ',', '.') . 'đ';
+                                            }
+
+                                            if (!empty($v['MaxDiscount']) && (float)$v['MaxDiscount'] > 0) {
+                                                $desc .= ' (tối đa ' . number_format((float)$v['MaxDiscount'], 0, ',', '.') . 'đ)';
+                                            }
+
+                                            if (!empty($v['MinOrder']) && (float)$v['MinOrder'] > 0) {
+                                                $desc .= ' | Đơn từ ' . number_format((float)$v['MinOrder'], 0, ',', '.') . 'đ';
+                                            }
+
+                                            $label = ($v['VoucherName'] ?? $v['Code']) . ' (' . $v['Code'] . ') — ' . $desc;
+                                            ?>
+                                            <option value="<?php echo htmlspecialchars($v['Code']); ?>"
+                                            <?php echo ($voucherCodeInput === $v['Code']) ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($label); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                        </select>
+
                                         <button type="submit" name="apply_voucher" value="1" class="account-btn-secondary">
-                                            Áp dụng
+                                        Áp dụng
                                         </button>
                                     </div>
 
                                     <?php if ($voucherCodeInput !== ''): ?>
                                         <?php if ($voucherError !== ''): ?>
-                                            <div class="small text-danger mt-1"><?php echo htmlspecialchars($voucherError); ?></div>
+                                        <div class="small text-danger mt-1"><?php echo htmlspecialchars($voucherError); ?></div>
                                         <?php else: ?>
-                                            <div class="small text-success mt-1">
-                                                Đã áp voucher: <strong><?php echo htmlspecialchars($voucher['VoucherName'] ?? $voucherCodeInput); ?></strong>
-                                            </div>
+                                        <div class="small text-success mt-1">
+                                            Đã áp voucher: <strong><?php echo htmlspecialchars($voucher['VoucherName'] ?? $voucherCodeInput); ?></strong>
+                                        </div>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
+
 
                                 <!-- PAYMENT -->
                                 <div class="checkout-field checkout-field-full">

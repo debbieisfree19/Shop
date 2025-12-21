@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $userId = $_SESSION['user_id'];
+$currentUsername = $_SESSION['username'] ?? null; // nếu m có lưu username
 
 /* ================= INPUT ================= */
 $skuid  = trim($_GET['skuid'] ?? '');
@@ -19,6 +20,53 @@ if ($skuid === '') {
     header('Location: shop.php');
     exit;
 }
+
+/* ================= ENSURE USERID MATCH FK (User_Account.UserID) ================= */
+/**
+ * Cart.UserID FK -> User_Account.UserID (thường dạng U00001)
+ * Nếu session đang lưu "1" hoặc dạng khác => phải đổi về đúng UserID.
+ */
+function resolve_userid(PDO $pdo, $sessionUserId, ?string $sessionUsername = null): ?string
+{
+    // 1) Nếu session đã là đúng UserID (Uxxxxx) và tồn tại
+    $uid = (string)$sessionUserId;
+
+    $check = $pdo->prepare("SELECT UserID FROM User_Account WHERE UserID = :uid LIMIT 1");
+    $check->execute([':uid' => $uid]);
+    $found = $check->fetchColumn();
+    if ($found) return $found;
+
+    // 2) Nếu sessionUserId là số (AutoID) => thử map (nếu bảng có cột AutoID)
+    if (ctype_digit($uid)) {
+        try {
+            $stmt = $pdo->prepare("SELECT UserID FROM User_Account WHERE AutoID = :aid LIMIT 1");
+            $stmt->execute([':aid' => (int)$uid]);
+            $found = $stmt->fetchColumn();
+            if ($found) return $found;
+        } catch (Exception $e) {
+            // nếu bảng không có AutoID thì bỏ qua
+        }
+    }
+
+    // 3) Thử map bằng username/fullname (nếu m lưu session username)
+    if ($sessionUsername) {
+        $stmt = $pdo->prepare("SELECT UserID FROM User_Account WHERE FullName = :name LIMIT 1");
+        $stmt->execute([':name' => $sessionUsername]);
+        $found = $stmt->fetchColumn();
+        if ($found) return $found;
+    }
+
+    return null;
+}
+
+$resolvedUserId = resolve_userid($pdo, $userId, $currentUsername);
+if (!$resolvedUserId) {
+    // session sai / user không tồn tại => logout cho khỏi lỗi FK
+    session_destroy();
+    header('Location: auth-login.php?err=session_invalid');
+    exit;
+}
+$userId = $resolvedUserId;
 
 /* ================= CHECK SKU ================= */
 $skuStmt = $pdo->prepare("
@@ -55,8 +103,8 @@ $priceStmt = $pdo->prepare("
 $priceStmt->execute([':skuid' => $skuid]);
 $priceRow = $priceStmt->fetch(PDO::FETCH_ASSOC);
 
-$unitPrice  = (float)$priceRow['UnitPrice'];
-$finalPrice = $priceRow['SalePrice'] !== null
+$unitPrice  = (float)($priceRow['UnitPrice'] ?? 0);
+$finalPrice = ($priceRow && $priceRow['SalePrice'] !== null)
     ? (float)$priceRow['SalePrice']
     : $unitPrice;
 
@@ -71,7 +119,14 @@ $cartStmt->execute([':uid' => $userId]);
 $cartId = $cartStmt->fetchColumn();
 
 if (!$cartId) {
-    $cartId = strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+    // tạo CartID kiểu random 6 ký tự, nếu trùng thì tạo lại
+    do {
+        $cartId = strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+        $exists = $pdo->prepare("SELECT 1 FROM Cart WHERE CartID = :cid LIMIT 1");
+        $exists->execute([':cid' => $cartId]);
+        $isDup = (bool)$exists->fetchColumn();
+    } while ($isDup);
+
     $pdo->prepare("
         INSERT INTO Cart (CartID, UserID)
         VALUES (:cid, :uid)
