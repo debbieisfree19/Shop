@@ -278,14 +278,21 @@ if ($subTotal > 0) {
     try {
         $vListSql = "
             SELECT
-                VoucherID, VoucherName, Code, Description,
-                DiscountType, DiscountValue, MinOrder, MaxDiscount,
-                StartDate, EndDate, UsageLimit, UsedCount, Status, RankRequirement
-            FROM Voucher
-            WHERE Status = 1
-            ORDER BY StartDate DESC
+                v.VoucherID, v.VoucherName, v.Code, v.Description,
+                v.DiscountType, v.DiscountValue, v.MinOrder, v.MaxDiscount,
+                v.StartDate, v.EndDate, v.UsageLimit, v.UsedCount, v.Status, v.RankRequirement
+            FROM Voucher v
+            LEFT JOIN User_Voucher uv
+                ON uv.VoucherID = v.VoucherID
+               AND uv.UserID = :uid
+               AND uv.OrderID IS NOT NULL
+            WHERE v.Status = 1
+              AND uv.ID IS NULL
+            ORDER BY v.StartDate DESC
         ";
-        $vListStmt = $pdo->query($vListSql);
+
+        $vListStmt = $pdo->prepare($vListSql);
+        $vListStmt->execute([':uid' => $userId]);
         $all = $vListStmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($all as $v) {
@@ -308,6 +315,7 @@ if ($subTotal > 0) {
         $availableVouchers = [];
     }
 }
+
 
 
 /* =========================
