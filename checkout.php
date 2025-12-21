@@ -217,57 +217,72 @@ if (!$selectedCarrier && !empty($carriers)) {
    APPLY VOUCHER
 ========================= */
 $voucher = null;
+$userVoucherId = null; // ✅ thêm dòng này
 $voucherError = '';
 $discountAmount = 0.0;
 
 if ($voucherCodeInput !== '' && $subTotal > 0) {
     try {
+        // ✅ LẤY voucher theo User_Voucher (thuộc user & chưa dùng)
         $vSql = "
             SELECT
-                VoucherID, VoucherName, Code, Description,
-                DiscountType, DiscountValue, MinOrder, MaxDiscount,
-                StartDate, EndDate, UsageLimit, UsedCount, Status
-            FROM Voucher
-            WHERE Code = :code
+                uv.ID AS UserVoucherID,
+                v.VoucherID, v.VoucherName, v.Code, v.Description,
+                v.DiscountType, v.DiscountValue, v.MinOrder, v.MaxDiscount,
+                v.StartDate, v.EndDate, v.UsageLimit, v.UsedCount, v.Status, v.RankRequirement
+            FROM User_Voucher uv
+            JOIN Voucher v ON v.VoucherID = uv.VoucherID
+            WHERE uv.UserID = :uid
+              AND uv.OrderID IS NULL
+              AND v.Code = :code
             LIMIT 1
         ";
         $vStmt = $pdo->prepare($vSql);
-        $vStmt->execute([':code' => $voucherCodeInput]);
+        $vStmt->execute([
+            ':uid'  => $userId,
+            ':code' => $voucherCodeInput
+        ]);
         $voucher = $vStmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$voucher) {
-            $voucherError = 'Mã voucher không tồn tại.';
-        } else if ((int)$voucher['Status'] !== 1) {
-            $voucherError = 'Voucher đang bị tắt.';
-        } else if (!now_in_range($voucher['StartDate'] ?? null, $voucher['EndDate'] ?? null)) {
-            $voucherError = 'Voucher đã hết hạn hoặc chưa tới thời gian áp dụng.';
-        } else if ($voucher['UsageLimit'] !== null && $voucher['UsedCount'] !== null
-                   && (int)$voucher['UsedCount'] >= (int)$voucher['UsageLimit']) {
-            $voucherError = 'Voucher đã hết lượt sử dụng.';
-        } else if ($voucher['MinOrder'] !== null && (float)$subTotal < (float)$voucher['MinOrder']) {
-            $voucherError = 'Đơn hàng chưa đạt giá trị tối thiểu để dùng voucher.';
-        } else if (!user_can_use_rank($customerRank, $voucher['RankRequirement'] ?? 'Chung')) {
-            $voucherError = 'Voucher không áp dụng cho hạng khách hàng của bạn.';
+            $voucherError = 'Voucher này không thuộc tài khoản của bạn hoặc đã được sử dụng.';
         } else {
-            $type  = strtolower(trim($voucher['DiscountType'] ?? ''));
-            $value = (float)($voucher['DiscountValue'] ?? 0);
+            $userVoucherId = $voucher['UserVoucherID']; // ✅ lưu lại để khi đặt hàng update
 
-            if ($type === 'percent' || $type === 'percentage') {
-                $discountAmount = $subTotal * ($value / 100.0);
+            // giữ nguyên các check còn lại
+            if ((int)$voucher['Status'] !== 1) {
+                $voucherError = 'Voucher đang bị tắt.';
+            } else if (!now_in_range($voucher['StartDate'] ?? null, $voucher['EndDate'] ?? null)) {
+                $voucherError = 'Voucher đã hết hạn hoặc chưa tới thời gian áp dụng.';
+            } else if ($voucher['UsageLimit'] !== null && $voucher['UsedCount'] !== null
+                       && (int)$voucher['UsedCount'] >= (int)$voucher['UsageLimit']) {
+                $voucherError = 'Voucher đã hết lượt sử dụng.';
+            } else if ($voucher['MinOrder'] !== null && (float)$subTotal < (float)$voucher['MinOrder']) {
+                $voucherError = 'Đơn hàng chưa đạt giá trị tối thiểu để dùng voucher.';
+            } else if (!user_can_use_rank($customerRank, $voucher['RankRequirement'] ?? 'Chung')) {
+                $voucherError = 'Voucher không áp dụng cho hạng khách hàng của bạn.';
             } else {
-                $discountAmount = $value;
-            }
+                $type  = strtolower(trim($voucher['DiscountType'] ?? ''));
+                $value = (float)($voucher['DiscountValue'] ?? 0);
 
-            if ($voucher['MaxDiscount'] !== null && (float)$voucher['MaxDiscount'] > 0) {
-                $discountAmount = min($discountAmount, (float)$voucher['MaxDiscount']);
-            }
+                if ($type === 'percent' || $type === 'percentage') {
+                    $discountAmount = $subTotal * ($value / 100.0);
+                } else {
+                    $discountAmount = $value;
+                }
 
-            $discountAmount = max(0, min($discountAmount, $subTotal));
+                if ($voucher['MaxDiscount'] !== null && (float)$voucher['MaxDiscount'] > 0) {
+                    $discountAmount = min($discountAmount, (float)$voucher['MaxDiscount']);
+                }
+
+                $discountAmount = max(0, min($discountAmount, $subTotal));
+            }
         }
     } catch (Exception $e) {
         $voucherError = 'Không thể áp voucher: ' . $e->getMessage();
     }
 }
+
 
 $totalAfterVoucher = max(0, $subTotal - $discountAmount);
 $grandTotal = $totalAfterVoucher + $shippingFee;
@@ -278,17 +293,16 @@ if ($subTotal > 0) {
     try {
         $vListSql = "
             SELECT
+                uv.ID AS UserVoucherID,
                 v.VoucherID, v.VoucherName, v.Code, v.Description,
                 v.DiscountType, v.DiscountValue, v.MinOrder, v.MaxDiscount,
                 v.StartDate, v.EndDate, v.UsageLimit, v.UsedCount, v.Status, v.RankRequirement
-            FROM Voucher v
-            LEFT JOIN User_Voucher uv
-                ON uv.VoucherID = v.VoucherID
-               AND uv.UserID = :uid
-               AND uv.OrderID IS NOT NULL
-            WHERE v.Status = 1
-              AND uv.ID IS NULL
-            ORDER BY v.StartDate DESC
+            FROM User_Voucher uv
+            JOIN Voucher v ON v.VoucherID = uv.VoucherID
+            WHERE uv.UserID = :uid
+              AND uv.OrderID IS NULL
+              AND v.Status = 1
+            ORDER BY uv.DateReceived DESC, v.StartDate DESC
         ";
 
         $vListStmt = $pdo->prepare($vListSql);
@@ -296,17 +310,13 @@ if ($subTotal > 0) {
         $all = $vListStmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($all as $v) {
-            // 1) thời gian
             if (!now_in_range($v['StartDate'] ?? null, $v['EndDate'] ?? null)) continue;
 
-            // 2) limit dùng
             if ($v['UsageLimit'] !== null && $v['UsedCount'] !== null
                 && (int)$v['UsedCount'] >= (int)$v['UsageLimit']) continue;
 
-            // 3) min order
             if ($v['MinOrder'] !== null && (float)$subTotal < (float)$v['MinOrder']) continue;
 
-            // 4) rank
             if (!user_can_use_rank($customerRank, $v['RankRequirement'] ?? 'Chung')) continue;
 
             $availableVouchers[] = $v;
@@ -315,6 +325,7 @@ if ($subTotal > 0) {
         $availableVouchers = [];
     }
 }
+
 
 
 
@@ -437,28 +448,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
             ]);
 
             // 4) voucher 
-            if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
-                $uvId = gen_id6();
-                // tạo ID kiểu V00010
-                $uvId = gen_user_voucher_id($pdo);
+                if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
 
-                $pdo->prepare("
-                    INSERT INTO User_Voucher (ID, UserID, VoucherID, OrderID, DateReceived)
-                    VALUES (:id, :uid, :vid, :oid, NOW())
-                ")->execute([
-                    ':id'  => $uvId,
-                    ':uid' => $userId,
-                    ':vid' => $voucher['VoucherID'],
-                    ':oid' => $orderId
-                ]);
+                    if (empty($userVoucherId)) {
+                        // an toàn: nếu không có UserVoucherID thì không cho dùng
+                        throw new Exception('Không xác định được User_Voucher để gắn vào đơn.');
+                    }
 
+                    // ✅ gắn voucher của user vào đơn (đánh dấu đã dùng)
+                    $upd = $pdo->prepare("
+                        UPDATE User_Voucher
+                        SET OrderID = :oid
+                        WHERE ID = :uvId
+                        AND UserID = :uid
+                        AND OrderID IS NULL
+                    ");
+                    $upd->execute([
+                        ':oid'  => $orderId,
+                        ':uvId' => $userVoucherId,
+                        ':uid'  => $userId
+                    ]);
 
-                $pdo->prepare("
-                    UPDATE Voucher
-                    SET UsedCount = IFNULL(UsedCount, 0) + 1
-                    WHERE VoucherID = :vid
-                ")->execute([':vid' => $voucher['VoucherID']]);
-            }
+                    if ($upd->rowCount() <= 0) {
+                        throw new Exception('Voucher đã được sử dụng hoặc không thuộc tài khoản của bạn.');
+                    }
+
+                    // ✅ tăng usedcount tổng (nếu bạn cần)
+                    $pdo->prepare("
+                        UPDATE Voucher
+                        SET UsedCount = IFNULL(UsedCount, 0) + 1
+                        WHERE VoucherID = :vid
+                    ")->execute([':vid' => $voucher['VoucherID']]);
+                }
+
 
             // 5) clear cart items
             $pdo->prepare("
@@ -696,7 +718,7 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
                                                 $desc .= ' | Đơn từ ' . number_format((float)$v['MinOrder'], 0, ',', '.') . 'đ';
                                             }
 
-                                            $label = ($v['VoucherName'] ?? $v['Code']) . ' (' . $v['Code'] . ') — ' . $desc;
+                                            $label = ($v['VoucherName'] ?? $v['Code']) . ' (' . $v['Code'] . ') - ' . $desc;
                                             ?>
                                             <option value="<?php echo htmlspecialchars($v['Code']); ?>"
                                             <?php echo ($voucherCodeInput === $v['Code']) ? 'selected' : ''; ?>>
