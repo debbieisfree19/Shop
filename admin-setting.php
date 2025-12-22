@@ -292,37 +292,6 @@ $bannerList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </form>
 
 
-<h3 class="mt-4">Banner hiện có</h3>
-
-<?php if (empty($bannerList)): ?>
-    <p class="text-muted">Chưa có banner nào.</p>
-<?php else: ?>
-    <div class="row">
-        <?php foreach ($bannerList as $b): ?>
-            <div class="col-md-4 mb-3">
-                <div class="account-card">
-                    <img src="banner-image.php?id=<?php echo (int) $b['BannerID']; ?>"
-                        style="width:100%;height:160px;object-fit:cover;border-radius:8px;">
-
-                    <p class="mt-2 fw-bold">
-                        <?php echo htmlspecialchars($b['Title'] ?? '(Không có tiêu đề)'); ?>
-                    </p>
-
-                    <form method="POST" onsubmit="return confirm('Bạn có chắc muốn xóa banner này không?');">
-                        <input type="hidden" name="action" value="delete_banner">
-                        <input type="hidden" name="banner_id" value="<?php echo (int) $b['BannerID']; ?>">
-
-                        <button class="btn btn-sm btn-outline-danger w-100">
-                            ❌ Xóa banner
-                        </button>
-                    </form>
-                </div>
-            </div>
-        <?php endforeach; ?>
-    </div>
-<?php endif; ?>
-
-
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+
 <script src="moonlit.js"></script>
