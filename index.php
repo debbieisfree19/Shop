@@ -334,75 +334,50 @@ try {
                     <h2 class="home-section-title">📚 Book of the Month</h2>
                 </div>
 
-                <div class="home-grid-3">
-                    <article class="product-card">
+                <?php if (!empty($bookOfTheMonth)): ?>
+                    <div class="home-grid-3">
+                        <article class="product-card">
 
-                        <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
-                            class="product-card-link">
+                            <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
+                                class="product-card-link">
 
-                            <!-- ẢNH -->
-                            <div class="product-card-image">
-                                <?php
-                                    $imgSrc = '';
-                                    if (!empty($bookOfTheMonth['ImageUrl'])) {
-                                        $imgSrc = $bookOfTheMonth['ImageUrl'];
-                                    } elseif (!empty($bookOfTheMonth['HasImage'])) {
-                                        $imgSrc = "product-image.php?id=" . urlencode($bookOfTheMonth['ProductID']);
-                                    }
-                                ?>
-
-                                <?php if ($imgSrc !== ''): ?>
-                                    <img src="<?php echo htmlspecialchars($imgSrc); ?>">
-                                <?php else: ?>
-                                    <div class="product-image-placeholder">Moonlit</div>
-                                <?php endif; ?>
-                            </div>
-
-
-                            <!-- BODY -->
-                            <div class="product-card-body">
-                                <h3 class="product-title">
-                                    <?php echo htmlspecialchars($bookOfTheMonth['ProductName']); ?>
-                                </h3>
-
-                                <p class="product-desc">
-                                    <?php echo htmlspecialchars(
-                                        mb_strimwidth($bookOfTheMonth['Description'] ?? '', 0, 80, '...')
-                                    ); ?>
-                                </p>
-
-                                <div class="product-price-row">
-                                    <?php if ($bookOfTheMonth['HasSale']): ?>
-                                        <span class="product-price text-danger">
-                                            <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
-                                        </span>
-                                        <span class="product-old-price">
-                                            <?php echo format_price($bookOfTheMonth['MaxOriginalPrice']); ?>
-                                        </span>
-                                        <span class="product-badge-sale">Bán chạy</span>
+                                <div class="product-card-image">
+                                    <?php if (!empty($bookOfTheMonth['HasImage'])): ?>
+                                        <img src="product-image.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>">
                                     <?php else: ?>
-                                        <span class="product-price">
-                                            <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
-                                        </span>
+                                        <div class="product-image-placeholder">Moonlit</div>
                                     <?php endif; ?>
                                 </div>
 
-                                <p class="featured-sold">
-                                    🔥 Đã bán: <?php echo (int) $bookOfTheMonth['TotalSold']; ?> cuốn
-                                </p>
-                            </div>
-                        </a>
+                                <div class="product-card-body">
+                                    <h3 class="product-title">
+                                        <?php echo htmlspecialchars($bookOfTheMonth['ProductName']); ?>
+                                    </h3>
 
-                        <!-- FOOTER -->
-                        <div class="product-card-footer">
-                            <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
-                                class="account-btn-secondary product-btn">
-                                Xem chi tiết
+                                    <p class="product-desc">
+                                        <?php echo htmlspecialchars(
+                                            mb_strimwidth($bookOfTheMonth['Description'] ?? '', 0, 80, '...')
+                                        ); ?>
+                                    </p>
+
+                                    <div class="product-price-row">
+                                        <span class="product-price">
+                                            <?php echo format_price($bookOfTheMonth['MinDisplayPrice']); ?>
+                                        </span>
+                                    </div>
+
+                                    <p class="featured-sold">
+                                        🔥 Đã bán: <?php echo (int) $bookOfTheMonth['TotalSold']; ?> cuốn
+                                    </p>
+                                </div>
                             </a>
-                        </div>
 
-                    </article>
-                </div>
+                        </article>
+                    </div>
+                <?php else: ?>
+                    <p class="home-empty-text">Hiện chưa có sản phẩm nổi bật.</p>
+                <?php endif; ?>
+            </div>
         </section>
         <!-- ===== SÁCH MỚI NHẤT ===== -->
         <section class="home-section">
@@ -608,3 +583,4 @@ try {
 </body>
 
 </html>
+
