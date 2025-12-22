@@ -3954,3 +3954,81 @@ img {
     padding: 8px 22px;
     font-size: 0.9rem;
 }
+/* =========================
+   CART RESPONSIVE
+========================= */
+
+@media (max-width: 768px) {
+  /* ép layout 2 cột -> 1 cột */
+  .cart-layout {
+    flex-direction: column;
+  }
+
+  .cart-items,
+  .cart-summary {
+    width: 100%;
+  }
+
+  /* 2 nút trong summary card xếp dọc + full width */
+  .cart-checkout-btn,
+  .cart-summary-card .account-btn-save,
+  .cart-summary-card .account-btn-secondary {
+    width: 100%;
+    display: block;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* hàng nút cập nhật / xóa hết: xếp dọc */
+  .cart-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .cart-update-btn {
+    width: 100%;
+  }
+
+  .cart-clear-link {
+    align-self: flex-end;
+  }
+
+  /* item gọn hơn trên mobile */
+  .cart-item {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px 10px;
+  }
+
+  .cart-item-info {
+    align-items: flex-start;
+  }
+
+  .cart-item-image {
+    width: 72px;
+    height: 72px;
+  }
+
+  .cart-item-price,
+  .cart-item-qty,
+  .cart-item-total,
+  .cart-item-remove {
+    text-align: left;
+  }
+
+  .cart-item-qty {
+    max-width: 160px;
+  }
+}
+
+/* thêm 1 chút cho màn rất nhỏ */
+@media (max-width: 576px) {
+  .cart-main {
+    padding: 16px 0 28px;
+  }
+
+  .cart-summary-card {
+    padding: 14px 14px 16px;
+  }
+}
