@@ -115,6 +115,7 @@ $sql = "
 
         p.ProductID,
         p.ProductName,
+        p.ImageUrl,
         (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage
     FROM Cart c
     JOIN Cart_Items ci ON c.CartID = ci.CartID
@@ -238,13 +239,22 @@ foreach ($items as $i) {
                                         <div class="cart-item">
                                             <div class="cart-item-info">
                                                 <div class="cart-item-image">
-                                                    <?php if (!empty($item['HasImage'])): ?>
-                                                        <img
-                                                            src="product-image.php?id=<?php echo urlencode($item['ProductID']); ?>">
+                                                    <?php
+                                                        $imgSrc = '';
+                                                        if (!empty($item['ImageUrl'])) {
+                                                            $imgSrc = $item['ImageUrl'];
+                                                        } elseif (!empty($item['HasImage'])) {
+                                                            $imgSrc = "product-image.php?id=" . urlencode($item['ProductID']);
+                                                        }
+                                                    ?>
+
+                                                    <?php if ($imgSrc !== ''): ?>
+                                                        <img src="<?php echo htmlspecialchars($imgSrc); ?>" alt="">
                                                     <?php else: ?>
                                                         <span class="shop-product-image-placeholder">Moonlit</span>
                                                     <?php endif; ?>
                                                 </div>
+
 
                                                 <div>
                                                     <div class="cart-item-title">

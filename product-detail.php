@@ -52,6 +52,7 @@ try {
             p.ProductName,
             p.Description,
             p.CreatedDate,
+            p.ImageUrl,
             (p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0) AS HasImage,
             pub.PublisherName,
             GROUP_CONCAT(DISTINCT c.CategoryName SEPARATOR ', ') AS Categories
@@ -308,6 +309,7 @@ if ($product) {
                 SELECT
                     p.ProductID,
                     p.ProductName,
+                    p.ImageUrl,
                     CASE WHEN p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0 THEN 1 ELSE 0 END AS HasImage,
 
                     x.MinFinalPrice,
@@ -457,16 +459,30 @@ if ($product) {
                     <div class="product-gallery">
                         <div class="product-gallery-main">
                             <div class="shop-product-image">
-                                <?php if (!empty($product['HasImage'])): ?>
+                                <?php
+                                    $imgSrc = '';
+
+                                    // ưu tiên link ảnh
+                                    if (!empty($product['ImageUrl'])) {
+                                        $imgSrc = $product['ImageUrl'];
+                                    }
+                                    // fallback BLOB cũ
+                                    elseif (!empty($product['HasImage'])) {
+                                        $imgSrc = "product-image.php?id=" . urlencode($product['ProductID']);
+                                    }
+                                ?>
+
+                                <?php if ($imgSrc !== ''): ?>
                                     <img
                                         id="product-main-image"
-                                        src="product-image.php?id=<?php echo urlencode($product['ProductID']); ?>"
+                                        src="<?php echo htmlspecialchars($imgSrc); ?>"
                                         alt="<?php echo htmlspecialchars($product['ProductName']); ?>"
                                     >
                                 <?php else: ?>
                                     <span class="shop-product-image-placeholder">Moonlit</span>
                                 <?php endif; ?>
                             </div>
+
                         </div>
                     </div>
 
@@ -671,15 +687,25 @@ if ($product) {
                                 <div class="account-card h-100 d-flex flex-column" style="padding: 16px;">
 
                                     <div class="shop-product-image mb-2">
-                                        <?php if (!empty($rel['HasImage'])): ?>
+                                        <?php
+                                            $relImg = '';
+                                            if (!empty($rel['ImageUrl'])) {
+                                                $relImg = $rel['ImageUrl'];
+                                            } elseif (!empty($rel['HasImage'])) {
+                                                $relImg = "product-image.php?id=" . urlencode($rel['ProductID']);
+                                            }
+                                        ?>
+
+                                        <?php if ($relImg !== ''): ?>
                                             <img
-                                                src="product-image.php?id=<?php echo urlencode($rel['ProductID']); ?>"
+                                                src="<?php echo htmlspecialchars($relImg); ?>"
                                                 alt="<?php echo htmlspecialchars($rel['ProductName']); ?>"
                                             >
                                         <?php else: ?>
                                             <span class="shop-product-image-placeholder">Moonlit</span>
                                         <?php endif; ?>
                                     </div>
+
 
                                     <h3 class="account-order-item-name text-truncate mb-1"
                                         title="<?php echo htmlspecialchars($rel['ProductName']); ?>">

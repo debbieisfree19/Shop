@@ -62,7 +62,10 @@ SELECT
   p.ProductID,
   p.ProductName,
   p.PublisherID,
-  p.CreatedDate,
+    p.CreatedDate,
+  p.ImageUrl,
+  CASE WHEN p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0 THEN 1 ELSE 0 END AS HasImage,
+
   CASE WHEN p.Image IS NOT NULL AND OCTET_LENGTH(p.Image) > 0 THEN 1 ELSE 0 END AS HasImage,
 
   x.MinFinalPrice,
@@ -290,20 +293,7 @@ WHERE 1=1
                             </select>
                         </div>
 
-                        <div class="shop-filter-item">
-                            <label class="account-label">Nhà xuất bản</label>
-                            <select name="publisher" class="account-input">
-                                <option value="">Tất cả</option>
-                                <?php foreach ($publishers as $pub): ?>
-                                    <option
-                                        value="<?php echo htmlspecialchars($pub['PublisherID']); ?>"
-                                        <?php echo ($publisherId !== '' && $publisherId == $pub['PublisherID']) ? 'selected' : ''; ?>
-                                    >
-                                        <?php echo htmlspecialchars($pub['PublisherName']); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                        
 
                         <div class="shop-filter-item">
                             <label class="account-label">Giá từ</label>
@@ -372,9 +362,22 @@ WHERE 1=1
                             <div class="shop-product-card">
 
                                 <div class="shop-product-image">
-                                    <?php if (!empty($product['HasImage'])): ?>
+                                    <?php
+                                        $imgSrc = '';
+
+                                        // 1) Ưu tiên link ảnh
+                                        if (!empty($product['ImageUrl'])) {
+                                            $imgSrc = $product['ImageUrl'];
+                                        }
+                                        // 2) Fallback: ảnh BLOB cũ
+                                        elseif (!empty($product['HasImage'])) {
+                                            $imgSrc = "product-image.php?id=" . urlencode($product['ProductID']);
+                                        }
+                                    ?>
+
+                                    <?php if ($imgSrc !== ''): ?>
                                         <img
-                                            src="product-image.php?id=<?php echo urlencode($product['ProductID']); ?>"
+                                            src="<?php echo htmlspecialchars($imgSrc); ?>"
                                             alt="<?php echo htmlspecialchars($product['ProductName']); ?>"
                                             loading="lazy"
                                         >
@@ -382,6 +385,7 @@ WHERE 1=1
                                         <span class="shop-product-image-placeholder">Moonlit</span>
                                     <?php endif; ?>
                                 </div>
+
 
                                 <h2 class="shop-product-title" title="<?php echo htmlspecialchars($product['ProductName']); ?>">
                                     <?php echo htmlspecialchars($product['ProductName']); ?>
