@@ -43,8 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
         }
 
-        /* ===== ADD EMPLOYEE ===== */
-        if ($action === 'ajax_add_employee') {
+        /* ===== ADD EMPLOYEE ===== */ else if ($action === 'ajax_add_employee') {
 
             $uid = generateUserID($pdo);
 
@@ -65,11 +64,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             jsonOut(['success' => true]);
         }
 
-        /* ===== UPDATE EMPLOYEE ===== */
-        if ($action === 'ajax_update_employee') {
+        /* ===== UPDATE EMPLOYEE ===== */ else if ($action === 'ajax_update_employee') {
 
             $params = [
                 ':id' => $_POST['user_id'],
+                ':username' => $_POST['username'],
                 ':name' => $_POST['full_name'],
                 ':email' => $_POST['email'],
                 ':phone' => $_POST['phone'],
@@ -78,7 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $sql = "
                 UPDATE User_Account
-                SET FullName = :name,
+                SET Username = :username,
+                    FullName = :name,
                     Email = :email,
                     Phone = :phone,
                     Status = :status
@@ -96,8 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             jsonOut(['success' => true]);
         }
 
-        /* ===== DELETE EMPLOYEE ===== */
-        if ($action === 'ajax_delete_employee') {
+        /* ===== DELETE EMPLOYEE ===== */ else if ($action === 'ajax_delete_employee') {
 
             $pdo->prepare("
                 DELETE FROM User_Account
@@ -108,6 +107,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             jsonOut(['success' => true]);
         }
+        /* ===== TOGGLE STATUS ===== */ else if ($action === 'ajax_toggle_employee_status') {
+
+            if (empty($_POST['user_id'])) {
+                throw new Exception('Thiếu UserID');
+            }
+
+            $pdo->prepare("
+                    UPDATE User_Account
+                    SET Status = IF(Status = 1, 0, 1)
+                    WHERE UserID = :id AND Role = 'Admin'
+                ")->execute([
+                        ':id' => $_POST['user_id']
+                    ]);
+
+            jsonOut(['success' => true]);
+        }
+
+
 
         throw new Exception('Action không hợp lệ');
 
@@ -132,8 +149,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <body class="account-body admin-page">
     <div class="account-card">
-        <h2 class="account-section-title">Danh sách nhân viên</h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="account-section-title mb-0">Danh sách nhân viên</h2>
 
+            <button class="btn btn-primary" onclick="openAddEmployee()">
+                + Thêm nhân viên
+            </button>
+        </div>
         <div class="table-responsive">
             <table class="admin-table">
                 <thead>
@@ -159,15 +181,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="modal fade" id="employeeModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <form id="employeeForm" class="modal-content">
-                <input type="hidden" name="action" value="ajax_update_employee">
+                <input type="hidden" name="action" id="emp_action" value="ajax_update_employee">
                 <input type="hidden" name="user_id" id="emp_user_id">
 
                 <div class="modal-header">
                     <h5 class="modal-title">Sửa nhân viên</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-
                 <div class="modal-body row g-3">
+                    <div class="col-md-6">
+                        <label class="account-label">Username</label>
+                        <input type="text" name="username" id="emp_username" class="account-input w-100">
+                    </div>
                     <div class="col-md-6">
                         <label class="account-label">Họ tên</label>
                         <input type="text" name="full_name" id="emp_fullname" class="account-input w-100" required>
@@ -185,11 +210,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div class="col-md-6">
                         <label class="account-label">Trạng thái</label>
-                        <select name="status" id="emp_status" class="account-input w-100">
-                            <option value="1">Hoạt động</option>
-                            <option value="0">Khóa</option>
-                        </select>
+
+                        <div class="d-flex gap-2">
+                            <select name="status" id="emp_status" class="account-input w-100">
+                                <option value="1">Hoạt động</option>
+                                <option value="0">Khóa</option>
+                            </select>
+
+
+                        </div>
                     </div>
+
 
                     <div class="col-12">
                         <label class="account-label">
@@ -235,14 +266,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <td>${e.Email ?? ''}</td>
                 <td>${e.Phone ?? ''}</td>
                 <td>
+                    <div class="d-flex align-items-center gap-2">
                         ${e.Status == 1
-                                ? `<span class="badge bg-primary">Hoạt động</span>`
+                                ? `<span class="badge bg-success">Hoạt động</span>`
                                 : `<span class="badge bg-secondary">Khóa</span>`
                             }
+
+                        <button class="btn btn-sm"
+                            onclick="toggleEmployeeStatus('${e.UserID}')"
+                                title="Đổi trạng thái">
+                                🔄
+                            </button>
+                        </div>
                 </td>
                 <td class="text-end">
                     <button class="btn btn-sm btn-outline-primary"
                         data-id="${e.UserID}"
+                        data-username="${e.Username}"
                         data-name="${e.FullName}"
                         data-email="${e.Email ?? ''}"
                         data-phone="${e.Phone ?? ''}"
@@ -277,18 +317,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 .then(() => loadEmployee());
         }
         function openEditEmployee(btn) {
+            document.getElementById('emp_action').value = 'ajax_update_employee';
+
             document.getElementById('emp_user_id').value = btn.dataset.id;
+            document.getElementById('emp_username').value = btn.dataset.username;
             document.getElementById('emp_fullname').value = btn.dataset.name;
             document.getElementById('emp_email').value = btn.dataset.email;
             document.getElementById('emp_phone').value = btn.dataset.phone;
             document.getElementById('emp_status').value = btn.dataset.status;
+            document.querySelector('#employeeModal .modal-title')
+                .innerText = 'Sửa nhân viên';
 
             const modal = new bootstrap.Modal(
                 document.getElementById('employeeModal')
             );
             modal.show();
         }
+        function toggleEmployeeStatus(userID) {
+            if (!confirm('Đổi trạng thái nhân viên này?')) return;
 
+            fetch('admin-employee.php', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    action: 'ajax_toggle_employee_status',
+                    user_id: userID
+                })
+            })
+                .then(r => r.json())
+                .then(res => {
+                    if (!res.success) {
+                        alert(res.message || 'Không đổi được trạng thái');
+                        return;
+                    }
+                    loadEmployee(); // reload lại bảng
+                });
+        }
+
+        function openAddEmployee() {
+            document.getElementById('employeeForm').reset();
+
+            document.getElementById('emp_action').value = 'ajax_add_employee';
+            document.getElementById('emp_user_id').value = '';
+
+            document.querySelector('#employeeModal .modal-title')
+                .innerText = 'Thêm nhân viên';
+
+            const modal = new bootstrap.Modal(
+                document.getElementById('employeeModal')
+            );
+            modal.show();
+        }
         document.getElementById('employeeForm').addEventListener('submit', function (e) {
             e.preventDefault();
 
