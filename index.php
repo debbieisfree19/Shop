@@ -341,13 +341,23 @@ try {
                             <a href="product-detail.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>"
                                 class="product-card-link">
 
-                                <div class="product-card-image">
-                                    <?php if (!empty($bookOfTheMonth['HasImage'])): ?>
-                                        <img src="product-image.php?id=<?php echo $bookOfTheMonth['ProductID']; ?>">
-                                    <?php else: ?>
-                                        <div class="product-image-placeholder">Moonlit</div>
-                                    <?php endif; ?>
-                                </div>
+                                <!-- ẢNH -->
+                            <div class="product-card-image">
+                                <?php
+                                    $imgSrc = '';
+                                    if (!empty($bookOfTheMonth['ImageUrl'])) {
+                                        $imgSrc = $bookOfTheMonth['ImageUrl'];
+                                    } elseif (!empty($bookOfTheMonth['HasImage'])) {
+                                        $imgSrc = "product-image.php?id=" . urlencode($bookOfTheMonth['ProductID']);
+                                    }
+                                ?>
+
+                                <?php if ($imgSrc !== ''): ?>
+                                    <img src="<?php echo htmlspecialchars($imgSrc); ?>">
+                                <?php else: ?>
+                                    <div class="product-image-placeholder">Moonlit</div>
+                                <?php endif; ?>
+                            </div>
 
                                 <div class="product-card-body">
                                     <h3 class="product-title">
@@ -583,4 +593,5 @@ try {
 </body>
 
 </html>
+
 
