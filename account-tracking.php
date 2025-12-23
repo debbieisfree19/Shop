@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             DateReceived = NOW() 
         WHERE OrderID = ? AND UserID = ? AND Status = 'Đã giao'
     ");
-    if ($stmt_update->execute([$order_id_confirm, $user_id])) {
+
         if ($stmt_update->execute([$order_id_confirm, $user_id])) {
         
         // ==================================================================
@@ -74,7 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit;
         }
     }
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_order') {
     $order_id_cancel = $_POST['order_id'] ?? 0;
