@@ -34,7 +34,12 @@ if (!function_exists('calculateUserRankForHome')) {
 $has_new_voucher = false; // Biến cờ để hiển thị thông báo
 
 
-if (isset($_SESSION['user_id'])) {
+// Lấy role từ session, nếu chưa có thì để rỗng
+$userRole = $_SESSION['role'] ?? ''; 
+
+// THÊM ĐIỀU KIỆN: && $userRole === 'Customer'
+// Chỉ chạy logic voucher nếu đã đăng nhập VÀ là Khách hàng
+if (isset($_SESSION['user_id']) && $userRole === 'Customer') { 
     $user_id_home = $_SESSION['user_id'];
    
     // 2. Tính Rank hiện tại
