@@ -172,7 +172,7 @@ $sql = "
         o.ShippingStreet, o.ShippingNumber, o.CreatedDate, o.DateReceived, o.Note,
         so.ShippingID, c.CarrierName, c.ShippingPrice,
         u.FullName as CustomerName, u.Phone as CustomerPhone, u.Email as CustomerEmail,
-        v.DiscountValue, v.DiscountType,
+        v.DiscountValue, v.DiscountType, v.MaxDiscount,
         ro.ReturnID, ro.Status as ReturnStatus, ro.TotalRefund, ro.CreatedDate as ReturnDate
     FROM `Order` o
     LEFT JOIN User_Account u ON o.UserID = u.UserID
@@ -301,7 +301,16 @@ if (!empty($orderIds)) {
                     $items = $orderItems[$o['OrderID']] ?? [];
                     $isReturned = !empty($o['ReturnID']);
                     $isCancelled = ($o['Status'] === 'Bị hủy');
-                    $finalTotal = $o['TotalAmountAfterVoucher'] > 0 ? $o['TotalAmountAfterVoucher'] : $o['TotalAmount'];
+                    // --- SỬA VỊ TRÍ 1: TÍNH TOÁN LẠI ---
+                    $shippingCost = !empty($o['ShippingPrice']) ? (float)$o['ShippingPrice'] : 0;
+                    $subTotal     = (float)$o['TotalAmount']; // Tiền hàng ban đầu
+
+                    // 1. Tổng gốc (Bao gồm cả ship)
+                    $originalTotalWithShip = $subTotal + $shippingCost;
+
+                    // 2. Tổng thực trả (So sánh: Nếu giá sau Voucher > 0 thì lấy, còn không thì lấy Tổng gốc)
+                    // Lưu ý: Logic này giả định TotalAmountAfterVoucher đã là giá cuối cùng cần thanh toán
+                    $finalPayable = ($o['TotalAmountAfterVoucher'] > 0) ? (float)$o['TotalAmountAfterVoucher'] : $originalTotalWithShip;
                     
                     $collapseId = "collapseOrder" . $o['OrderID'];
                     $headingId = "headingOrder" . $o['OrderID'];
@@ -331,7 +340,7 @@ if (!empty($orderIds)) {
                                     </small>
                                 </div>
                                 <div class="text-end">
-                                    <strong class="text-primary"><?php echo number_format($finalTotal, 0, ',', '.'); ?> đ</strong>
+                                    <strong class="text-primary"><?php echo number_format($finalPayable, 0, ',', '.'); ?> đ</strong>
                                     <br><small class="text-muted"><?php echo h($o['CustomerName']); ?></small>
                                 </div>
                             </div>
@@ -402,27 +411,49 @@ if (!empty($orderIds)) {
                                         <span>Tạm tính:</span>
                                         <span><?php echo number_format($o['TotalAmount'], 0, ',', '.'); ?> đ</span>
                                     </div>
+                                    <?php if (!empty($o['DiscountValue'])): ?>
+                                        <div class="d-flex justify-content-between small text-danger">
+                                            <span>Voucher:</span>
+                                            <div class="text-end">
+                                                <span>
+                                                    -<?php 
+                                                        if (strcasecmp($o['DiscountType'] ?? '', 'PERCENT') == 0 || ($o['DiscountType'] ?? '') == '%') {
+                                                            echo number_format($o['DiscountValue'], 0) . '%';
+                                                        } else {
+                                                            echo number_format($o['DiscountValue'], 0, ',', '.') . ' đ';
+                                                        }
+                                                    ?>
+                                                </span>
+                                                
+                                                <?php if (!empty($o['MaxDiscount']) && $o['MaxDiscount'] > 0): ?>
+                                                    <br>
+                                                    <small class="text-muted fst-italic">
+                                                        (Tối đa: <?php echo number_format($o['MaxDiscount'], 0, ',', '.'); ?> đ)
+                                                    </small>
+                                                <?php endif; ?>
+                                                </div>
+                                        </div>
+                                    <?php endif; ?>
                                     <div class="d-flex justify-content-between small">
                                         <span>Phí vận chuyển:</span>
                                         <span><?php echo !empty($o['ShippingPrice']) ? number_format($o['ShippingPrice'], 0, ',', '.') . ' đ' : '0 đ'; ?></span>
                                     </div>
-                                    <?php if (!empty($o['DiscountValue'])): ?>
-                                        <div class="d-flex justify-content-between small text-danger">
-                                            <span>Voucher:</span>
-                                            <span>
-                                                -<?php 
-                                                    if (strcasecmp($o['DiscountType'] ?? '', 'PERCENT') == 0 || ($o['DiscountType'] ?? '') == '%') {
-                                                        echo number_format($o['DiscountValue'], 0) . '%';
-                                                    } else {
-                                                        echo number_format($o['DiscountValue'], 0, ',', '.') . ' đ';
-                                                    }
-                                                ?>
-                                            </span>
-                                        </div>
-                                    <?php endif; ?>
-                                    <div class="d-flex justify-content-between fw-bold border-top pt-1 mt-1">
+                                    <div class="d-flex justify-content-between fw-bold border-top pt-1 mt-1 align-items-center">
                                         <span>Tổng cộng:</span>
-                                        <span class="text-primary"><?php echo number_format($finalTotal, 0, ',', '.'); ?> đ</span>
+                                        <div class="text-end">
+                                            <?php if ($finalPayable < $originalTotalWithShip): ?>
+                                                <small class="text-muted text-decoration-line-through me-1 fw-normal">
+                                                    <?php echo number_format($originalTotalWithShip, 0, ',', '.'); ?> đ
+                                                </small>
+                                                <span class="text-danger">
+                                                    <?php echo number_format($finalPayable, 0, ',', '.'); ?> đ
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="text-primary">
+                                                    <?php echo number_format($finalPayable, 0, ',', '.'); ?> đ
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
 

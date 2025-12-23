@@ -13,17 +13,20 @@ if (!function_exists('calculateUserRankForHome')) {
             SELECT (SUM(o.TotalAmount) - COALESCE(SUM(ro.TotalRefund), 0)) as total_spent
             FROM `Order` o
             LEFT JOIN Returns_Order ro ON o.OrderID = ro.OrderID AND ro.Status = 'Chấp thuận'
-            WHERE o.UserID = ? AND o.Status IN ('Đã nhận', 'Trả hàng')
+            WHERE o.UserID = ? AND o.Status IN ('Đã nhận', 'Trả hàng', 'Đã hoàn tiền')
         ");
         $stmt->execute([$user_id]);
         $total_spent = $stmt->fetch()['total_spent'] ?? 0;
 
+            // Tính rank
+            if ($total_spent < 100000) $rank = 'Member';
+            elseif ($total_spent < 200000) $rank = 'Bronze';
+            elseif ($total_spent < 300000) $rank = 'Silver';
+            elseif ($total_spent < 400000) $rank = 'Gold';
+            else $rank = 'Platinum';
 
-        if ($total_spent < 100000) return 'Member';
-        if ($total_spent < 200000) return 'Bronze';
-        if ($total_spent < 300000) return 'Silver';
-        if ($total_spent < 400000) return 'Gold';
-        return 'Platinum';
+            // Trả về cả hai (Mảng)
+            return ['rank' => $rank, 'money' => $total_spent];
     }
 }
 
@@ -35,7 +38,9 @@ if (isset($_SESSION['user_id'])) {
     $user_id_home = $_SESSION['user_id'];
    
     // 2. Tính Rank hiện tại
-    $current_tier = calculateUserRankForHome($pdo, $user_id_home);
+    $result = calculateUserRankForHome($pdo, $user_id_home);
+    $current_tier = $result['rank']; // Lấy chữ Platinum
+    $total_spent  = $result['money']; // Lấy số tiền ra biến global để dùng
 
 
     // 3. Kiểm tra xem có voucher nào (Rank hiện tại HOẶC Free) mà user CHƯA CÓ trong User_Voucher không
@@ -54,8 +59,12 @@ if (isset($_SESSION['user_id'])) {
    
     $stmtCheck->execute([$current_tier, $user_id_home]);
     $count_new = $stmtCheck->fetchColumn();
-
-
+    
+    // Check xem có voucher Platinum nào thỏa mãn không (Bỏ qua điều kiện User_Voucher để test)
+    $stmtTest = $pdo->prepare("SELECT * FROM Voucher WHERE RankRequirement = ?");
+    $stmtTest->execute([$current_tier]);
+    $vouchers = $stmtTest->fetchAll();
+    
     if ($count_new > 0) {
         $has_new_voucher = true;
     }

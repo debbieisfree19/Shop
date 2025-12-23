@@ -68,7 +68,8 @@ $stmt = $pdo->prepare("
         c.CarrierName,
         c.ShippingPrice,
         oi.DiscountedPrice,
-        v.DiscountValue, 
+        v.DiscountValue,
+        v.MaxDiscount, 
         v.DiscountType 
     FROM `Order` o
     LEFT JOIN Order_Items oi ON o.OrderID = oi.OrderID
@@ -113,6 +114,7 @@ foreach ($orders as $order) {
             'ShippingPrice' => $order['ShippingPrice'],
             'VoucherValue' => $order['DiscountValue'], 
             'VoucherType' => $order['DiscountType'],
+            'MaxDiscount' => $order['MaxDiscount'],
             'Items' => []
         ];
     }
@@ -285,16 +287,19 @@ $status_config = [
                             <span class="account-tracking-detail-value">
                                 <?php 
                                 if (!empty($order['VoucherValue'])) {
-                                    // Kiểm tra loại giảm giá. 
-                                    // Lưu ý: Bạn cần kiểm tra xem trong DB bạn lưu là 'Percentage', 'Percent' hay 'Phần trăm' để sửa chuỗi bên dưới cho khớp.
+                                    // Kiểm tra loại giảm giá (Percentage/Percent/Phần trăm/%)
                                     if (strcasecmp($order['VoucherType'], 'PERCENT') == 0 || $order['VoucherType'] == '%') {
                                         
-                                        // Hiển thị dạng phần trăm. VD: -10%
+                                        // 1. Hiển thị % giảm
                                         echo '-' . number_format($order['VoucherValue'], 0) . '%';
                                         
-                                    } else {
+                                        // 2. Hiển thị Max Discount (Nếu có và > 0)
+                                        if (!empty($order['MaxDiscount']) && $order['MaxDiscount'] > 0) {
+                                            echo ' (Tối đa ' . number_format($order['MaxDiscount'], 0, ',', '.') . 'đ)</span>';
+                                        }
                                         
-                                        // Hiển thị dạng tiền tệ. VD: -50.000 đ
+                                    } else {
+                                        // Loại giảm tiền mặt trực tiếp
                                         echo '-' . number_format($order['VoucherValue'], 0, ',', '.') . ' đ';
                                     }
                                 } else {

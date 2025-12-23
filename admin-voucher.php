@@ -286,7 +286,7 @@ $rankMap = [
                         <div class="row">
                             <div class="col-6 mb-3">
                                 <label class="form-label">Loại giảm giá</label>
-                                <select class="form-select" name="DiscountType">
+                                <select class="form-select" name="DiscountType" id="discountType">
                                     <?php $dType = $editData['DiscountType'] ?? 'PERCENT'; ?>
                                     <option value="PERCENT" <?= $dType == 'PERCENT' ? 'selected' : '' ?>>Phần trăm (%)</option>
                                     <option value="AMOUNT" <?= $dType == 'AMOUNT' ? 'selected' : '' ?>>Số tiền (VND)</option>
@@ -304,7 +304,7 @@ $rankMap = [
                                 <input type="number" class="form-control" name="MinOrder" 
                                        value="<?= h($editData['MinOrder'] ?? '0') ?>">
                             </div>
-                            <div class="col-6 mb-3">
+                            <div class="col-6 mb-3" id="maxDiscountWrapper">
                                 <label class="form-label">Giảm tối đa</label>
                                 <input type="number" class="form-control" name="MaxDiscount" 
                                        value="<?= h($editData['MaxDiscount'] ?? '0') ?>" placeholder="0 = KGH">
@@ -506,7 +506,68 @@ $rankMap = [
     </div>
 </div>
 
-<script src="moonlit.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 1. KIỂM TRA ĐANG Ở TRANG VOUCHER
+    const voucherPage = document.querySelector('[data-page-id="admin-voucher"]');
+    
+    if (voucherPage) {
+        console.log("--> Đã nhận diện trang Admin Voucher");
+
+        // --- PHẦN A: ẨN/HIỆN ĐIỂM (RANK) ---
+        const rankSelect = document.getElementById('rankSelect');
+        const pointContainer = document.getElementById('pointContainer');
+
+        if (rankSelect && pointContainer) {
+            const pointInput = pointContainer.querySelector('input');
+            const handlePoint = function() {
+                if (rankSelect.value === 'None') {
+                    pointContainer.style.display = 'block';
+                    if(pointInput) pointInput.disabled = false;
+                } else {
+                    pointContainer.style.display = 'none';
+                    if(pointInput) pointInput.disabled = true;
+                }
+            };
+            // Chạy ngay và lắng nghe sự kiện
+            handlePoint();
+            rankSelect.addEventListener('change', handlePoint);
+        }
+
+        // --- PHẦN B: ẨN/HIỆN GIẢM TỐI ĐA (FIX LỖI) ---
+        const typeSelect = document.getElementById('discountType');
+        const maxWrapper = document.getElementById('maxDiscountWrapper');
+
+        if (typeSelect && maxWrapper) {
+            const maxInput = maxWrapper.querySelector('input');
+
+            const handleMaxDiscount = function() {
+                const currentType = typeSelect.value;
+                console.log("Loại giảm giá:", currentType); // Debug
+
+                if (currentType === 'AMOUNT') {
+                    // Nếu là Tiền mặt -> Ẩn Max Discount
+                    maxWrapper.style.display = 'none';
+                    if (maxInput) maxInput.value = 0; 
+                } else {
+                    // Nếu là % -> Hiện Max Discount
+                    maxWrapper.style.display = 'block';
+                }
+            };
+
+            // 1. Chạy ngay khi load trang
+            handleMaxDiscount();
+
+            // 2. Lắng nghe sự kiện thay đổi
+            typeSelect.addEventListener('change', handleMaxDiscount);
+            
+            console.log("--> Đã kích hoạt sự kiện cho DiscountType");
+        } else {
+            console.error("LỖI: Không tìm thấy ID 'discountType' hoặc 'maxDiscountWrapper'");
+        }
+    }
+});
+</script>
 
 </body>
 </html>

@@ -345,60 +345,6 @@ document.addEventListener('DOMContentLoaded', function () {
     };
   }
 
-    // SCRIPT QUẢN LÝ VOUCHER TRÊN TRANG ADMIN-VOUCHER
-  const isVoucherPage = document.querySelector('[data-page-id="admin-voucher"]');
-  if (isVoucherPage) {
-    const rankSelect = document.getElementById('rankSelect');
-    const pointContainer = document.getElementById('pointContainer');
-
-    if (rankSelect && pointContainer) {
-      const pointInput = pointContainer.querySelector('input');
-
-      // Tạo một hàm xử lý riêng
-      const handleToggle = function () {
-        if (rankSelect.value === 'None') {
-          pointContainer.style.display = 'block';
-          if (pointInput) pointInput.disabled = false;
-        } else {
-          pointContainer.style.display = 'none';
-          if (pointInput) pointInput.disabled = true;
-        }
-      };
-
-      // Chạy ngay khi load trang (để xử lý trường hợp trang Edit có dữ liệu cũ)
-      handleToggle();
-
-      // QUAN TRỌNG: Lắng nghe sự kiện thay đổi khi người dùng chọn
-      rankSelect.addEventListener('change', handleToggle);
-    }
-}
-    
-    // SCRIPT QUẢN LÝ ĐƠN HÀNG TRÊN TRANG ADMIN-ORDERS (TRẢ HÀNG & THEO DÕI TRẢ HÀNG)
-    const isOrderPage = document.querySelector('[data-page-id="admin-orders"]');
-    if (isOrderPage) {
-        const mainStatus = document.getElementById('mainStatus');
-        const subStatusContainer = document.getElementById('subStatusContainer');
-
-        // 1. Hàm xử lý ẩn/hiện dropdown phụ
-        const handleReturnStatusToggle = () => {
-            if (!mainStatus || !subStatusContainer) return;
-
-            if (mainStatus.value === 'Trả hàng') {
-                subStatusContainer.style.display = 'block';
-            } else {
-                subStatusContainer.style.display = 'none';
-                // Reset giá trị select phụ khi ẩn
-                const subSelect = subStatusContainer.querySelector('select');
-                if (subSelect) subSelect.value = '';
-            }
-        };
-
-        // 2. Chạy ngay khi load trang (để giữ trạng thái sau khi bấm Lọc)
-        handleReturnStatusToggle();
-
-        // 3. Lắng nghe sự kiện thay đổi trên dropdown chính
-        mainStatus.addEventListener('change', handleReturnStatusToggle);
-}
     // SCRIPT ĐỊA CHÍNH VIỆT NAM TRÊN TRANG ADMIN-SETTING
     const isSettingPage = document.querySelector('[data-page-id="admin-setting"]');
     if (isSettingPage) {

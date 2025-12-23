@@ -71,16 +71,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         try {
             $pdo->beginTransaction();
 
-            // [BƯỚC 1] Lấy thông tin Đơn hàng, Ship và Voucher để làm tham số tính toán
+            // [BƯỚC 1] Lấy thông tin Đơn hàng & Voucher
+            // Join thêm bảng User_Voucher và Voucher để lấy DiscountType, DiscountValue, MaxDiscount
             $stmtOrder = $pdo->prepare("
                 SELECT 
                     o.TotalAmount,
-                    COALESCE(c.ShippingPrice, 0) as ShippingPrice,
                     v.DiscountType,
-                    v.DiscountValue
+                    v.DiscountValue,
+                    v.MaxDiscount
                 FROM `Order` o
-                LEFT JOIN Shipping_Order so ON o.OrderID = so.OrderID
-                LEFT JOIN Carrier c ON so.CarrierID = c.CarrierID
                 LEFT JOIN User_Voucher uv ON o.OrderID = uv.OrderID
                 LEFT JOIN Voucher v ON uv.VoucherID = v.VoucherID
                 WHERE o.OrderID = ?
@@ -90,22 +89,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             if (!$orderInfo) throw new Exception('Không tìm thấy thông tin đơn hàng.');
 
-            // Tính "Tổng tiền hàng" (Mẫu số trong công thức) = Total - Ship
-            $total_paid = $orderInfo['TotalAmount'] ?? 0;
-            $shipping_price = $orderInfo['ShippingPrice'] ?? 0;
-            $goods_paid_total = $total_paid - $shipping_price;
+            // --- XÁC ĐỊNH CÁC THAM SỐ TÍNH TOÁN ---
 
-            // [BƯỚC 2] Quy đổi Voucher ra số tiền cụ thể (VoucherMoney)
-            $voucher_money = 0;
+            // 1. Tổng tiền hàng (Mẫu số): Lấy trực tiếp TotalAmount (theo yêu cầu mới)
+            $total_goods_value = (float)$orderInfo['TotalAmount'];
+
+            // 2. Tính số tiền Voucher thực tế (Tử số phần trừ)
+            $actual_voucher_money = 0;
+            
             if (!empty($orderInfo['DiscountValue'])) {
-                // Kiểm tra loại voucher (PERCENT hoặc AMOUNT)
-                // Lưu ý: Đảm bảo chuỗi 'PERCENT' khớp với DB của bạn (ví dụ: 'Percentage', '%', ...)
-                if (strcasecmp($orderInfo['DiscountType'] ?? '', 'PERCENT') == 0 || ($orderInfo['DiscountType'] ?? '') == '%') {
-                    // TH2: Voucher là PERCENT -> Tính ra tiền: (Total - Ship) * %
-                    $voucher_money = $goods_paid_total * ($orderInfo['DiscountValue'] / 100);
+                $type = strtoupper($orderInfo['DiscountType'] ?? ''); // PERCENT hoặc AMOUNT
+                $val  = (float)$orderInfo['DiscountValue'];
+                $max  = (float)($orderInfo['MaxDiscount'] ?? 0);
+
+                if ($type === 'PERCENT' || $type === '%') {
+                    // Logic Voucher %:
+                    // a. Tính số tiền giảm lý thuyết: Tổng tiền hàng * %
+                    $calculated_discount = $total_goods_value * ($val / 100);
+
+                    // b. Kiểm tra MaxDiscount (Trần giảm giá)
+                    if ($max > 0 && $calculated_discount > $max) {
+                        $actual_voucher_money = $max; // Nếu vượt trần -> lấy trần
+                    } else {
+                        $actual_voucher_money = $calculated_discount; // Nếu không -> lấy số tính được
+                    }
                 } else {
-                    // TH1: Voucher là AMOUNT -> Lấy giá trị trực tiếp
-                    $voucher_money = $orderInfo['DiscountValue'];
+                    // Logic Voucher tiền mặt (AMOUNT): Lấy trực tiếp giá trị
+                    $actual_voucher_money = $val;
                 }
             }
 
@@ -116,7 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             $total_refund = 0;
 
-            // [BƯỚC 3] Xử lý từng sản phẩm & Áp dụng công thức
+            // [BƯỚC 3] Xử lý từng item & Tính toán hoàn tiền
+            // Công thức: Giá Item - ( (Giá Item / Tổng tiền hàng) * Tiền Voucher thực tế )
             foreach ($selected_items as $order_item_id) {
                 $qty = isset($quantities[$order_item_id]) ? (int)$quantities[$order_item_id] : 0;
                 $reason = isset($reasons[$order_item_id]) ? trim($reasons[$order_item_id]) : '';
@@ -124,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 if ($qty <= 0) throw new Exception('Số lượng trả phải lớn hơn 0.');
                 if (empty($reason)) throw new Exception('Vui lòng chọn lý do trả hàng.');
 
-                // Lấy thông tin sản phẩm: UnitPrice VÀ DiscountedPrice
+                // Lấy thông tin sản phẩm
                 $stmt = $pdo->prepare("SELECT UnitPrice, DiscountedPrice, Quantity FROM Order_Items WHERE OrderItemID = ?");
                 $stmt->execute([$order_item_id]);
                 $item = $stmt->fetch();
@@ -133,23 +144,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     throw new Exception('Dữ liệu sản phẩm không hợp lệ.');
                 }
 
-                // --- TÍNH TOÁN HOÀN TIỀN ---
-                
-                // 1. Xác định x (Giá item để tính): Ưu tiên DiscountedPrice
-                $x = (!empty($item['DiscountedPrice']) && $item['DiscountedPrice'] > 0) 
+                // Xác định giá gốc của sản phẩm (x)
+                // Ưu tiên lấy DiscountedPrice nếu có, ngược lại lấy UnitPrice
+                $x = (!empty($item['DiscountedPrice']) && $item['DiscountedPrice'] > 0 && $item['DiscountedPrice'] < $item['UnitPrice']) 
                      ? $item['DiscountedPrice'] 
                      : $item['UnitPrice'];
 
-                // 2. Áp dụng công thức: x - [x / (Total - Ship) * VoucherMoney]
-                $unit_refund = $x; // Mặc định là giá gốc nếu không có voucher
-                
-                if ($goods_paid_total > 0 && $voucher_money > 0) {
-                    $deduction = ($x / $goods_paid_total) * $voucher_money;
+                // --- LOGIC TÍNH TOÁN ---
+                $unit_refund = $x; 
+
+                // Chỉ tính phân bổ voucher nếu có tiền hàng và có voucher
+                if ($total_goods_value > 0 && $actual_voucher_money > 0) {
+                    // Tỷ lệ đóng góp của sản phẩm này vào đơn hàng
+                    $ratio = $x / $total_goods_value;
+
+                    // Số tiền voucher được phân bổ cho 1 đơn vị sản phẩm này
+                    $deduction = $ratio * $actual_voucher_money;
+
+                    // Giá hoàn tiền cuối cùng = Giá gốc - Phần voucher gánh
                     $unit_refund = $x - $deduction;
                 }
 
-                // Làm tròn xuống để tránh lỗi lẻ tiền (VND)
-                $unit_refund = floor($unit_refund); 
+                // Làm tròn xuống (floor) để an toàn về số tiền
+                $unit_refund = floor($unit_refund);
 
                 // Tổng hoàn cho dòng sản phẩm này
                 $refund_amount = $qty * $unit_refund;
@@ -160,7 +177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $stmt->execute([$return_id, $order_item_id, $qty, $refund_amount, $reason]);
                 $return_item_id = $pdo->lastInsertId();
 
-                // Upload ảnh (Giữ nguyên logic cũ)
+                // Upload ảnh (Code giữ nguyên)
                 if (!isset($_FILES['return_images']['name'][$order_item_id]) || empty($_FILES['return_images']['name'][$order_item_id][0])) {
                     throw new Exception('Vui lòng tải lên hình ảnh minh chứng cho sản phẩm.');
                 }
@@ -186,10 +203,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
             }
 
-            // Cập nhật tổng tiền hoàn và trạng thái đơn
+            // Cập nhật tổng tiền hoàn vào bảng Returns_Order
             $stmt = $pdo->prepare("UPDATE Returns_Order SET TotalRefund = ? WHERE ReturnID = ?");
             $stmt->execute([$total_refund, $return_id]);
 
+            // Cập nhật trạng thái đơn hàng
             $stmt = $pdo->prepare("UPDATE `Order` SET Status = 'Trả hàng' WHERE OrderID = ?");
             $stmt->execute([$order_id]);
 
@@ -330,7 +348,7 @@ if (!empty($page_order_ids)) {
             oi.OrderItemID, oi.Quantity, oi.UnitPrice, oi.DiscountedPrice,
             p.ProductName, p.Image, p.ImageUrl, s.Format, s.ISBN, p.ProductID, s.SKUID,
             c.CarrierName, c.ShippingPrice,
-            v.DiscountValue, v.DiscountType  
+            v.DiscountValue, v.MaxDiscount, v.DiscountType  
         FROM `Order` o
         LEFT JOIN Order_Items oi ON o.OrderID = oi.OrderID
         LEFT JOIN SKU s ON oi.SKU_ID = s.SKUID
@@ -370,6 +388,7 @@ if (!empty($page_order_ids)) {
                 'ShippingPrice' => $order['ShippingPrice'],
                 'VoucherValue' => $order['DiscountValue'], 
                 'VoucherType' => $order['DiscountType'],
+                'MaxDiscount' => $order['MaxDiscount'],
                 'Items' => []
             ];
         }
@@ -571,16 +590,19 @@ if (!empty($page_order_ids)) {
                             <span class="account-tracking-detail-value">
                                 <?php 
                                 if (!empty($order['VoucherValue'])) {
-                                    // Kiểm tra loại giảm giá. 
-                                    // Lưu ý: Bạn cần kiểm tra xem trong DB bạn lưu là 'Percentage', 'Percent' hay 'Phần trăm' để sửa chuỗi bên dưới cho khớp.
+                                    // Kiểm tra loại giảm giá (Percentage/Percent/Phần trăm/%)
                                     if (strcasecmp($order['VoucherType'], 'PERCENT') == 0 || $order['VoucherType'] == '%') {
                                         
-                                        // Hiển thị dạng phần trăm. VD: -10%
+                                        // 1. Hiển thị % giảm
                                         echo '-' . number_format($order['VoucherValue'], 0) . '%';
                                         
-                                    } else {
+                                        // 2. Hiển thị Max Discount (Nếu có và > 0)
+                                        if (!empty($order['MaxDiscount']) && $order['MaxDiscount'] > 0) {
+                                            echo ' (Tối đa ' . number_format($order['MaxDiscount'], 0, ',', '.') . 'đ)</span>';
+                                        }
                                         
-                                        // Hiển thị dạng tiền tệ. VD: -50.000 đ
+                                    } else {
+                                        // Loại giảm tiền mặt trực tiếp
                                         echo '-' . number_format($order['VoucherValue'], 0, ',', '.') . ' đ';
                                     }
                                 } else {
@@ -607,19 +629,37 @@ if (!empty($page_order_ids)) {
                         <div class="account-order-total">
                             Tổng tiền: 
                             <?php 
-                            // [LOGIC MỚI] 
-                            // Kiểm tra nếu có giá sau Voucher VÀ nó khác với giá gốc (nghĩa là có áp dụng voucher)
-                            if (!empty($order['TotalAmountAfterVoucher']) && $order['TotalAmountAfterVoucher'] != $order['TotalAmount']) {
+                            // [LOGIC ĐÃ SỬA] 
+                            
+                            // 1. Lấy tiền ship (nếu null thì bằng 0)
+                            $shipping_price = isset($order['ShippingPrice']) ? $order['ShippingPrice'] : 0;
+                            
+                            // 2. Tính Tổng tiền gốc (Tiền hàng + Ship)
+                            // Lưu ý: Đảm bảo $order['TotalAmount'] là tổng tiền hàng chưa bao gồm ship theo logic DB của bạn
+                            $original_total = $order['TotalAmount'] + $shipping_price;
+
+                            // 3. Lấy Giá thực tế phải trả (Sau khi áp Voucher)
+                            // Nếu dữ liệu null hoặc = 0 thì lấy tổng gốc
+                            $final_total = (!empty($order['TotalAmountAfterVoucher']) && $order['TotalAmountAfterVoucher'] > 0) 
+                                        ? $order['TotalAmountAfterVoucher'] 
+                                        : $original_total;
+
+                            // 4. So sánh và hiển thị
+                            if ($final_total < $original_total) {
                                 
-                                // 1. Hiển thị giá SAU khi giảm (In đậm, là giá phải trả thực tế)
-                                echo '<strong>' . number_format($order['TotalAmountAfterVoucher'], 0, ',', '.') . ' đ</strong>';
+                                // TRƯỜNG HỢP 1: Có áp dụng Voucher (Giá cuối < Tổng gốc)
                                 
-                                // 2. Hiển thị giá GỐC (Gạch ngang, màu xám)
-                                echo ' <del class="account-order-item-old-price">' . number_format($order['TotalAmount'], 0, ',', '.') . ' đ</del>';
+                                // Hiện giá đã giảm (In đậm)
+                                echo '<strong>' . number_format($final_total, 0, ',', '.') . ' đ</strong>';
+                                
+                                // Hiện giá gốc (Gạch ngang, màu xám)
+                                echo ' <del class="account-order-item-old-price">' . number_format($original_total, 0, ',', '.') . ' đ</del>';
                                 
                             } else {
-                                // Trường hợp không có voucher hoặc giá không đổi
-                                echo '<strong>' . number_format($order['TotalAmount'], 0, ',', '.') . ' đ</strong>';
+                                
+                                // TRƯỜNG HỢP 2: Không có voucher hoặc giá không đổi
+                                // Chỉ hiện 1 giá duy nhất
+                                echo '<strong>' . number_format($final_total, 0, ',', '.') . ' đ</strong>';
                             }
                             ?>
                         </div>
