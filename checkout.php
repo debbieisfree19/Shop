@@ -690,7 +690,7 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
                                             <?php foreach ($carriers as $c): ?>
                                                 <option value="<?php echo htmlspecialchars($c['CarrierID']); ?>"
                                                     <?php echo ($selectedCarrierId === $c['CarrierID']) ? 'selected' : ''; ?>>
-                                                    <?php echo htmlspecialchars($c['CarrierName']) . ' — ' . number_format((float)$c['ShippingPrice'], 0, ',', '.') . ' đ'; ?>
+                                                    <?php echo htmlspecialchars($c['CarrierName']) . ' - ' . number_format((float)$c['ShippingPrice'], 0, ',', '.') . ' đ'; ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
@@ -1060,5 +1060,6 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
 
 </body>
 </html>
+
 
 
