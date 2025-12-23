@@ -50,6 +50,16 @@ try {
     $stmtBeforeStartDate->execute();
 } catch (Exception $e) {}
 
+try {
+    $stmtLimit = $pdo->prepare("
+        UPDATE Voucher
+        SET Status = 0
+        WHERE Status = 1 
+          AND UsedCount >= UsageLimit
+    ");
+    $stmtLimit->execute();
+} catch (Exception $e) {}
+
 // ============================================================================
 // [THAY ĐỔI] 1. XỬ LÝ XÓA VOUCHER (CHỈ KHI STATUS = 0)
 // ============================================================================
