@@ -54,7 +54,6 @@ function generatePublisherID(PDO $pdo): string
     return 'N' . str_pad($next, 5, '0', STR_PAD_LEFT);
 }
 
-require_once 'db_connect.php';
 //====== Hàm sinh SKU dạng SKU001 ======
 function generateSKUID(PDO $pdo): string
 {
@@ -93,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_
         }
 
         $stmt = $pdo->prepare("
-            SELECT SKUID, Format, BuyPrice, SellPrice, Stock, Status
+            SELECT SKUID, ISBN, Format, BuyPrice, SellPrice, Stock, Status
             FROM SKU
             WHERE ProductID = :pid
             ORDER BY SKUID
@@ -163,6 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_
                 'mode' => 'locked',
                 'message' => 'SKU đã có đơn hàng → chuyển sang Ngừng bán'
             ]);
+
             exit;
         }
 
@@ -196,9 +196,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'ajax_
             'message' => $e->getMessage()
         ]);
     }
+    echo "<script>
+    window.location.href = 'admin-dashboard.php?tab=products&success=add';
+    </script>";
     exit;
 }
+// ===== AJAX update category  =====
+else if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'ajax_update_sku'
+) {
+    $pdo->prepare("
+    UPDATE SKU
+    SET Format = :format,
+        ISBN = :isbn,
+        BuyPrice = :buy,
+        SellPrice = :sell,
+        Stock = :stock,
+        Status = :status
+    WHERE SKUID = :id
+  ")->execute([
+                ':format' => $_POST['format'],
+                ':isbn' => $_POST['isbn'] ?: null,
+                ':buy' => $_POST['buy_price'],
+                ':sell' => $_POST['sell_price'],
+                ':stock' => $_POST['stock'],
+                ':status' => $_POST['status'],
+                ':id' => $_POST['skuid']
+            ]);
 
+    echo json_encode(['success' => true]);
+    exit;
+}
 
 //Xử lý load trang sau mỗi lần thêm
 // ===== AJAX thêm category  =====
@@ -320,7 +349,90 @@ else if (
         ]);
     }
     exit;
+} else if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['action'] ?? '') === 'ajax_update_product'
+) {
+    header('Content-Type: application/json; charset=utf-8');
+    if (ob_get_length()) ob_clean();
+
+    try {
+        $pdo->beginTransaction();
+
+        $params = [
+            ':id'        => $_POST['product_id'],
+            ':name'      => $_POST['name'],
+            ':status'    => (int)$_POST['status'],
+            ':publisher' => $_POST['publisher_id'] ?: null,
+            ':author'    => $_POST['author_id'] ?: null
+        ];
+
+        $sql = "
+            UPDATE Product
+            SET ProductName = :name,
+                Status = :status,
+                PublisherID = :publisher,
+                AuthorID = :author
+        ";
+
+        // chỉ update ảnh khi có upload
+        if (
+            isset($_FILES['image']) &&
+            $_FILES['image']['error'] === UPLOAD_ERR_OK &&
+            is_uploaded_file($_FILES['image']['tmp_name'])
+        ) {
+            $sql .= ", Image = :image";
+        }
+
+        $sql .= " WHERE ProductID = :id";
+        $stmt = $pdo->prepare($sql);
+
+        // bind param thường
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+
+        // bind ảnh nếu có
+        if (!empty($_FILES['image']['tmp_name'])) {
+            $fp = fopen($_FILES['image']['tmp_name'], 'rb');
+            $stmt->bindParam(':image', $fp, PDO::PARAM_LOB);
+        }
+
+        // ✅ EXECUTE 1 LẦN DUY NHẤT
+        $stmt->execute();
+
+        // ===== CATEGORY =====
+        if (isset($_POST['category_id'])) {
+            $pdo->prepare("
+                DELETE FROM Product_Categories
+                WHERE ProductID = :id
+            ")->execute([':id' => $_POST['product_id']]);
+
+            if ($_POST['category_id'] !== '') {
+                $pdo->prepare("
+                    INSERT INTO Product_Categories (ProductID, CategoryID)
+                    VALUES (:pid, :cid)
+                ")->execute([
+                    ':pid' => $_POST['product_id'],
+                    ':cid' => $_POST['category_id']
+                ]);
+            }
+        }
+
+        $pdo->commit();
+
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        echo json_encode([
+            'success' => false,
+            'message' => $e->getMessage()
+        ]);
+    }
+    exit;
 }
+
+
 
 // ====== Xử lý submit form ======
 else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -381,7 +493,10 @@ else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $pdo->commit();
-
+            echo "<script>
+                window.location.href = 'admin-dashboard.php?tab=products&success=add';
+            </script>";
+            exit;
         } catch (Exception $e) {
             $pdo->rollBack();
             $error_message = $e->getMessage();
@@ -394,11 +509,26 @@ else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $skuId = generateSKUID($pdo);
             $name = trim($_POST['name'] ?? '');
             $description = trim($_POST['description'] ?? '');
-            $price = trim($_POST['price'] ?? '');
+            $buyPrice = $_POST['buy_price'] ?? null;
+            $sellPrice = $_POST['sell_price'] ?? null;
+            $stock = $_POST['stock'] ?? null;
+            if ($stock < 0) {
+                throw new Exception('Tồn kho không hợp lệ');
+            }
+            if ($buyPrice === null || $sellPrice === null) {
+                throw new Exception('Thiếu giá mua hoặc giá bán');
+            }
+            if ($sellPrice < $buyPrice) {
+                throw new Exception('Giá bán không được thấp hơn giá mua');
+            }
             $salePrice = trim($_POST['sale_price'] ?? '');
             $publisherId = $_POST['publisher_id'] ?? '';
             $categoryId = $_POST['category_id'] ?? '';
             $authorId = $_POST['author_id'] ?? null;
+            $isbn = trim($_POST['isbn'] ?? '');
+            if ($isbn !== '' && !preg_match('/^[0-9\-]{10,17}$/', $isbn)) {
+                throw new Exception('ISBN không hợp lệ');
+            }
 
             // xử lý image
             $imageData = null;
@@ -416,7 +546,7 @@ else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id' => $productId,
                 ':name' => $name,
                 ':desc' => $description,
-                ':price' => $price,
+                ':price' => $sellPrice,
                 ':image' => $imageData,
                 ':publisher' => $publisherId ?: null,
                 ':author' => $authorId ?: null
@@ -439,18 +569,35 @@ else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($format === '') {
                 throw new Exception('Thiếu đặc tính SKU');
             }
+            if ($isbn !== '') {
+                $stmt = $pdo->prepare("
+                    SELECT COUNT(*) FROM SKU
+                    WHERE ProductID = :pid AND ISBN = :isbn
+                ");
+                $stmt->execute([
+                    ':pid' => $productId,
+                    ':isbn' => $isbn
+                ]);
+
+                if ($stmt->fetchColumn() > 0) {
+                    throw new Exception('ISBN đã tồn tại cho sản phẩm này');
+                }
+            }
 
             $pdo->prepare("
-                    INSERT INTO SKU
-                    (SKUID, ProductID, Format, BuyPrice, SellPrice, Stock, Status)
-                    VALUES (:skuid, :pid, :format, :buy, :sell, 50, 1)
-                ")->execute([
+                INSERT INTO SKU
+                (SKUID, ProductID, ISBN, Format, BuyPrice, SellPrice, Stock, Status)
+                VALUES (:skuid, :pid, :isbn, :format, :buy, :sell, :stock, 1)
+            ")->execute([
                         ':skuid' => $skuId,
                         ':pid' => $productId,
+                        ':isbn' => $isbn ?: null,
                         ':format' => $format,
-                        ':buy' => $price,
-                        ':sell' => $price
+                        ':buy' => $buyPrice,
+                        ':sell' => $sellPrice,
+                        ':stock' => $stock
                     ]);
+
 
 
             /* Sale */
@@ -470,86 +617,14 @@ else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($_GET['success'])) {
                 $success_message = 'Đã thêm sản phẩm';
             }
+            echo "<script>
+                window.location.href = 'admin-dashboard.php?tab=products&success=add';
+            </script>";
             exit;
         } catch (Exception $e) {
-            $pdo->rollBack();
             $error_message = $e->getMessage();
         }
 
-    } else if ($action === 'update') {
-        try {
-            $pdo->beginTransaction();
-
-            $productId = $_POST['product_id'];
-            $name = $_POST['name'];
-            $price = $_POST['price'];
-            $salePrice = $_POST['sale_price'] ?? null;
-            $publisherId = $_POST['publisher_id'] ?? null;
-            $categoryId = $_POST['category_id'] ?? null;
-
-            // Update Product
-            $pdo->prepare("
-            UPDATE Product
-            SET ProductName = :name,
-                Price = :price,
-                PublisherID = :publisher
-            WHERE ProductID = :id
-        ")->execute([
-                        ':name' => $name,
-                        ':price' => $price,
-                        ':publisher' => $publisherId ?: null,
-                        ':id' => $productId
-                    ]);
-
-            // Update Category
-            $pdo->prepare("DELETE FROM Product_Categories WHERE ProductID = :id")
-                ->execute([':id' => $productId]);
-
-            if ($categoryId) {
-                $pdo->prepare("
-                INSERT INTO Product_Categories (ProductID, CategoryID)
-                VALUES (:pid, :cid)
-            ")->execute([
-                            ':pid' => $productId,
-                            ':cid' => $categoryId
-                        ]);
-            }
-
-            // Update SKU price
-            $pdo->prepare("
-            UPDATE SKU SET SellPrice = :price
-            WHERE ProductID = :pid
-        ")->execute([
-                        ':price' => $price,
-                        ':pid' => $productId
-                    ]);
-
-            // Update Sale
-            $pdo->prepare("
-            DELETE ps FROM PRODUCT_SALE ps
-            JOIN SKU s ON ps.SKUID = s.SKUID
-            WHERE s.ProductID = :pid
-        ")->execute([':pid' => $productId]);
-
-            if ($salePrice) {
-                $pdo->prepare("
-                INSERT INTO PRODUCT_SALE
-                (ProductSaleID, SKUID, DiscountedPrice, StartDate, EndDate)
-                SELECT CONCAT('PS', SUBSTRING(UUID(),1,4)), SKUID, :price, NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY)
-                FROM SKU WHERE ProductID = :pid
-            ")->execute([
-                            ':price' => $salePrice,
-                            ':pid' => $productId
-                        ]);
-            }
-
-            $pdo->commit();
-            $success_message = 'Đã cập nhật sản phẩm';
-
-        } catch (Exception $e) {
-            $pdo->rollBack();
-            $error_message = $e->getMessage();
-        }
     } else if ($action === 'add_sku') {
         try {
             $skuId = generateSKUID($pdo);
@@ -557,16 +632,18 @@ else if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $sellPrice = $_POST['sell_price'] ?? null;
             $stock = $_POST['stock'] ?? 0;
             $format = trim($_POST['format'] ?? '');
+            $isbn = trim($_POST['isbn'] ?? '');
             if ($format === '' || $buyPrice === null || $sellPrice === null) {
                 throw new Exception('Thiếu thông tin SKU');
             }
             $pdo->prepare("
              INSERT INTO SKU
-            (SKUID, ProductID, Format, BuyPrice, SellPrice, Stock, Status)
-            VALUES (:id, :pid, :format, :buy, :sell, :stock, 1)
+            (SKUID, ProductID, ISBN, Format, BuyPrice, SellPrice, Stock, Status)
+            VALUES (:id, :pid,:isbn, :format, :buy, :sell, :stock, 1)
         ")->execute([
                         ':id' => $skuId,
                         ':pid' => $_POST['product_id'],
+                        ':isbn' => $isbn ?: null,
                         ':format' => $format,
                         ':buy' => $buyPrice,
                         ':sell' => $sellPrice,
@@ -612,31 +689,48 @@ $authors = $authorStmt->fetchAll(PDO::FETCH_ASSOC);
 $products = [];
 try {
     $sql = "
-       SELECT
+SELECT
     p.ProductID,
     p.ProductName,
     p.Price,
     p.CreatedDate,
     p.Status AS ProductStatus,
+
+    p.PublisherID,
+    p.AuthorID,
+    pc.CategoryID,
+
     pub.PublisherName,
     ba.AuthorName,
     GROUP_CONCAT(DISTINCT c.CategoryName) AS Categories,
-    sku.SellPrice,
-    ps.DiscountedPrice
+
+    (
+        SELECT MIN(s.SellPrice)
+        FROM SKU s
+        WHERE s.ProductID = p.ProductID
+          AND s.Status = 1
+    ) AS SellPrice,
+
+    (
+        SELECT ps.DiscountedPrice
+        FROM PRODUCT_SALE ps
+        JOIN SKU s2 ON ps.SKUID = s2.SKUID
+        WHERE s2.ProductID = p.ProductID
+          AND NOW() BETWEEN ps.StartDate AND ps.EndDate
+        ORDER BY ps.DiscountedPrice ASC
+        LIMIT 1
+    ) AS DiscountedPrice
+
 FROM Product p
-JOIN SKU sku ON p.ProductID = sku.ProductID
-LEFT JOIN PRODUCT_SALE ps
-       ON ps.SKUID = sku.SKUID
-      AND NOW() BETWEEN ps.StartDate AND ps.EndDate
 LEFT JOIN Publisher pub ON p.PublisherID = pub.PublisherID
 LEFT JOIN Book_Author ba ON p.AuthorID = ba.AuthorID
 LEFT JOIN Product_Categories pc ON p.ProductID = pc.ProductID
 LEFT JOIN Categories c ON pc.CategoryID = c.CategoryID
-GROUP BY p.ProductID;
+GROUP BY p.ProductID
+ORDER BY p.CreatedDate DESC
+";
 
 
-
-    ";
     $stmt = $pdo->query($sql);
     $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -753,9 +847,17 @@ GROUP BY p.ProductID;
                 </div>
 
                 <div class="col-md-3">
-                    <label class="account-label" for="price">Giá (VND) *</label>
-                    <input type="number" class="account-input w-100" id="price" name="price" min="0" step="1000"
-                        required>
+                    <label class="account-label">Giá mua *</label>
+                    <input type="number" name="buy_price" class="account-input w-100" min="0" step="1000" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="account-label">Giá bán *</label>
+                    <input type="number" name="sell_price" class="account-input w-100" min="0" step="1000" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="account-label">Tồn kho ban đầu *</label>
+                    <input type="number" name="stock" class="account-input w-100" min="0" required>
                 </div>
 
                 <div class="col-md-3">
@@ -798,6 +900,11 @@ GROUP BY p.ProductID;
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <div class="col-md-6">
+                    <label class="account-label">ISBN</label>
+                    <input type="text" name="isbn" class="account-input w-100" placeholder="VD: 9786043654789">
+                </div>
+
                 <div class="col-md-6">
                     <label class="account-label">Đặc tính / Format *</label>
                     <input type="text" name="sku_format" class="account-input w-100"
@@ -880,12 +987,10 @@ GROUP BY p.ProductID;
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="product_id"
                                                 value="<?php echo htmlspecialchars($p['ProductID']); ?>">
-                                            <button type="button" class="btn btn-sm btn-outline-primary admin-btn-small"
-                                                data-bs-toggle="modal" data-bs-target="#editModal"
-                                                data-id="<?= $p['ProductID'] ?>"
-                                                data-name="<?= htmlspecialchars($p['ProductName']) ?>"
-                                                data-price="<?= $p['Price'] ?>"
-                                                data-publisher="<?= htmlspecialchars($p['PublisherName'] ?? '') ?>">
+
+                                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                                data-bs-target="#editProductModal"
+                                                data-product='<?= json_encode($p, JSON_HEX_APOS) ?>'>
                                                 Sửa
                                             </button>
                                             <button type="submit" class="btn btn-sm btn-outline-danger admin-btn-small"
@@ -911,10 +1016,10 @@ GROUP BY p.ProductID;
                 </div>
             <?php endif; ?>
         </div>
-        <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal fade" id="editProductModal" tabindex="-1">
             <div class="modal-dialog modal-lg">
-                <form method="POST" class="modal-content">
-                    <input type="hidden" name="action" value="update">
+                <form method="POST" class="modal-content" id="editProductForm" enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="ajax_update_product">
                     <input type="hidden" name="product_id" id="edit_product_id">
 
                     <div class="modal-header">
@@ -925,24 +1030,22 @@ GROUP BY p.ProductID;
                     <div class="modal-body row g-3">
 
                         <div class="col-md-6">
-                            <label class="account-label">Tên sách</label>
-                            <input type="text" name="name" id="edit_name" class="account-input w-100" required>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="account-label">Giá</label>
-                            <input type="number" name="price" id="edit_price" class="account-input w-100" required>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="account-label">Giá KM</label>
-                            <input type="number" name="sale_price" id="edit_sale_price" class="account-input w-100">
+                            <label class="account-label">Tên sách *</label>
+                            <input type="text" id="edit_product_name" name="name" class="account-input w-100" required>
                         </div>
 
                         <div class="col-md-6">
+                            <label class="account-label">Trạng thái</label>
+                            <select id="edit_product_status" name="status" class="account-input w-100">
+                                <option value="1">Đang bán</option>
+                                <option value="0">Ngừng bán</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
                             <label class="account-label">Nhà xuất bản</label>
-                            <select name="publisher_id" id="edit_publisher" class="account-input w-100">
-                                <option value="">-- Chọn NXB --</option>
+                            <select name="publisher_id" id="edit_product_publisher" class="account-input w-100">
+                                <option value="">-- Chọn --</option>
                                 <?php foreach ($publishers as $pub): ?>
                                     <option value="<?= $pub['PublisherID'] ?>">
                                         <?= htmlspecialchars($pub['PublisherName']) ?>
@@ -951,27 +1054,52 @@ GROUP BY p.ProductID;
                             </select>
                         </div>
 
-                        <div class="col-md-6">
-                            <label class="account-label">Danh mục</label>
-                            <select name="category_id" id="edit_category" class="account-input w-100">
-                                <option value="">-- Chọn danh mục --</option>
-                                <?php foreach ($categories as $cate): ?>
-                                    <option value="<?= $cate['CategoryID'] ?>">
-                                        <?= htmlspecialchars($cate['CategoryName']) ?>
+                        <div class="col-md-4">
+                            <label class="account-label">Tác giả</label>
+                            <select name="author_id" id="edit_product_author" class="account-input w-100">
+                                <option value="">-- Chọn --</option>
+                                <?php foreach ($authors as $a): ?>
+                                    <option value="<?= $a['AuthorID'] ?>">
+                                        <?= htmlspecialchars($a['AuthorName']) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
 
+                        <div class="col-md-4">
+                            <label class="account-label">Danh mục</label>
+                            <select name="category_id" id="edit_product_category" class="account-input w-100">
+                                <option value="">-- Chọn --</option>
+                                <?php foreach ($categories as $c): ?>
+                                    <option value="<?= $c['CategoryID'] ?>">
+                                        <?= htmlspecialchars($c['CategoryName']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="account-label">Ảnh hiện tại</label>
+                            <div>
+                                <img id="edit_product_preview" src="" alt="Ảnh bìa"
+                                    style="max-height:150px; border:1px solid #ddd; padding:4px">
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="account-label">Ảnh bìa (để trống nếu không đổi)</label>
+                            <input type="file" name="image" class="account-input w-100" accept="image/*">
+                        </div>
+
                     </div>
 
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
+                        <button class="btn btn-primary">Lưu thay đổi</button>
                     </div>
                 </form>
-
             </div>
         </div>
+
         <div class="modal fade" id="skuModal" tabindex="-1">
             <div class="modal-dialog">
                 <form method="POST" class="modal-content">
@@ -988,7 +1116,10 @@ GROUP BY p.ProductID;
                             <label class="account-label">Đặc tính / Format *</label>
                             <input type="text" name="format" class="account-input w-100" required>
                         </div>
-
+                        <div class="col-12">
+                            <label class="account-label">ISBN</label>
+                            <input type="text" name="isbn" class="account-input w-100" placeholder="VD: 9786043654789">
+                        </div>
                         <div class="col-md-6">
                             <label class="account-label">Giá mua *</label>
                             <input type="number" name="buy_price" class="account-input w-100" min="0" step="1000"
@@ -1030,6 +1161,64 @@ GROUP BY p.ProductID;
                 </div>
             </div>
         </div>
+        <div class="modal fade" id="editSkuModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <form method="POST" class="modal-content" id="editSkuForm">
+                    <input type="hidden" name="action" value="ajax_update_sku">
+                    <input type="hidden" name="skuid" id="edit_sku_id">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Sửa sách</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body row g-3">
+
+                        <!-- SKU -->
+                        <div class="col-md-6">
+                            <label class="account-label">Đặc tính / Format</label>
+                            <input type="text" id="edit_sku_format" name="format" class="account-input w-100" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="account-label">ISBN</label>
+                            <input type="text" id="edit_sku_isbn" name="isbn" class="account-input w-100">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="account-label">Giá mua</label>
+                            <input type="number" id="edit_sku_buy" name="buy_price" class="account-input w-100"
+                                step="1000" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="account-label">Giá bán</label>
+                            <input type="number" id="edit_sku_sell" name="sell_price" class="account-input w-100"
+                                step="1000" required>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="account-label">Tồn kho</label>
+                            <input type="number" id="edit_sku_stock" name="stock" class="account-input w-100">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="account-label">Trạng thái</label>
+                            <select id="edit_sku_status" name="status" class="account-input w-100">
+                                <option value="1">Đang bán</option>
+                                <option value="0">Ngừng bán</option>
+                            </select>
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="btn btn-primary">Lưu thay đổi</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
 
         <script>
             document.getElementById('categoryForm').addEventListener('submit', function (e) {
@@ -1093,14 +1282,7 @@ GROUP BY p.ProductID;
                         console.error(err);
                     });
             });
-            const editModal = document.getElementById('editModal');
-            editModal.addEventListener('show.bs.modal', function (event) {
-                const btn = event.relatedTarget;
 
-                document.getElementById('edit_product_id').value = btn.dataset.id;
-                document.getElementById('edit_name').value = btn.dataset.name;
-                document.getElementById('edit_price').value = btn.dataset.price;
-            });
             document.getElementById('skuModal')
                 .addEventListener('show.bs.modal', e => {
                     document.getElementById('sku_product_id').value =
@@ -1135,6 +1317,7 @@ GROUP BY p.ProductID;
             <tr>
               <th>SKUID</th>
               <th>Đặc tính</th>
+              <th>ISBN</th>
               <th>Giá mua</th>
               <th>Giá bán</th>
               <th>Tồn kho</th>
@@ -1150,15 +1333,21 @@ GROUP BY p.ProductID;
             <tr>
               <td>${sku.SKUID}</td>
               <td>${sku.Format}</td>
+              <td> ${sku.ISBN ?? ''}</td>
               <td>${Number(sku.BuyPrice).toLocaleString()} đ</td>
               <td>${Number(sku.SellPrice).toLocaleString()} đ</td>
               <td>${sku.Stock}</td>
               <td>${sku.Status == 1 ? 'Đang bán' : 'Ẩn'}</td>
               <td class="text-center">
-              <button class="btn btn-sm btn-outline-danger"
-                onclick="deleteSKU('${sku.SKUID}', '${productId}')">
-                Xóa
-              </button>
+                <button class="btn btn-sm btn-outline-primary me-1"
+                    onclick='openEditSKU(${JSON.stringify(sku)})'>
+                    Sửa
+                </button>
+
+                <button class="btn btn-sm btn-outline-danger"
+                    onclick="deleteSKU('${sku.SKUID}', '${productId}')">
+                    Xóa
+                </button>
                 </td>
             </tr>
             `;
@@ -1283,11 +1472,146 @@ GROUP BY p.ProductID;
                         console.error(err);
                     });
             });
+            function openEditSKU(sku) {
+
+                // đóng modal danh sách SKU trước
+                const skuListModalEl = document.getElementById('skuListModal');
+                const skuListModal = bootstrap.Modal.getInstance(skuListModalEl);
+                if (skuListModal) {
+                    skuListModal.hide();
+                }
+
+                // fill data
+                document.getElementById('edit_sku_id').value = sku.SKUID;
+                document.getElementById('edit_sku_format').value = sku.Format;
+                document.getElementById('edit_sku_isbn').value = sku.ISBN ?? '';
+                document.getElementById('edit_sku_buy').value = sku.BuyPrice;
+                document.getElementById('edit_sku_sell').value = sku.SellPrice;
+                document.getElementById('edit_sku_stock').value = sku.Stock;
+                document.getElementById('edit_sku_status').value = sku.Status;
+
+                // mở modal sửa SKU SAU KHI modal kia đã đóng
+                setTimeout(() => {
+                    new bootstrap.Modal(
+                        document.getElementById('editSkuModal'),
+                        { focus: true }
+                    ).show();
+                }, 300);
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+
+                const editForm = document.getElementById('editSkuForm');
+                if (!editForm) return;
+
+                editForm.addEventListener('submit', function (e) {
+                    e.preventDefault(); // ⛔ CHẶN SUBMIT THƯỜNG
+
+                    const fd = new FormData(this);
+
+                    fetch('admin-products.php', {
+                        method: 'POST',
+                        body: fd
+                    })
+                        .then(res => res.json())
+                        .then(res => {
+                            if (!res.success) {
+                                alert('Cập nhật SKU thất bại');
+                                return;
+                            }
+
+                            // đóng modal edit
+                            const editModalEl = document.getElementById('editSkuModal');
+                            bootstrap.Modal.getInstance(editModalEl).hide();
+
+                            // CLEANUP BACKDROP + BODY
+                            document.body.classList.remove('modal-open');
+                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                        })
+
+                        .catch(err => {
+                            alert('Lỗi khi lưu SKU');
+                            console.error(err);
+                        });
+                });
+
+            });
+
+
+            document.addEventListener('DOMContentLoaded', function () {
+
+                const form = document.getElementById('editProductForm');
+                if (!form) return;
+
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault(); // ⛔ chặn submit thường
+
+                    const fd = new FormData(form);
+
+                    fetch('admin-products.php', {
+                        method: 'POST',
+                        body: fd
+                    })
+                        .then(res => res.json())
+                        .then(res => {
+                            if (!res.success) {
+                                alert(res.message || 'Cập nhật sản phẩm thất bại');
+                                return;
+                            }
+
+                            // đóng modal
+                            const modalEl = document.getElementById('editProductModal');
+                            bootstrap.Modal.getInstance(modalEl).hide();
+
+                            // cleanup backdrop (tránh màn hình đen)
+                            document.body.classList.remove('modal-open');
+                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+
+                            // reload trang để thấy dữ liệu mới
+                            window.location.reload();
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            alert('Lỗi khi lưu sản phẩm');
+                        });
+                });
+
+            });
+            document.getElementById('editProductModal')
+                .addEventListener('show.bs.modal', e => {
+
+                    const p = JSON.parse(e.relatedTarget.dataset.product);
+
+                    document.getElementById('edit_product_id').value = p.ProductID;
+                    document.getElementById('edit_product_name').value = p.ProductName;
+                    document.getElementById('edit_product_status').value = p.ProductStatus;
+                    document.getElementById('edit_product_publisher').value = p.PublisherID ?? '';
+                    document.getElementById('edit_product_author').value = p.AuthorID ?? '';
+                    document.getElementById('edit_product_category').value = p.CategoryID ?? '';
+
+                    // 🔥 LOAD ẢNH
+                    document.getElementById('edit_product_preview').src =
+                        'admin-product-image.php?id=' + p.ProductID + '&t=' + Date.now();
+                });
+            document.querySelector('#editProductModal input[type="file"]')
+                .addEventListener('change', function () {
+                    const file = this.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        document.getElementById('edit_product_preview').src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+
         </script>
 
     </main>
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 </body>
+
 </html>
