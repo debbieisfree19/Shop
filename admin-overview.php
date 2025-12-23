@@ -17,7 +17,7 @@ $stmt = $pdo->query("
     LEFT JOIN Returns_Order ro
         ON ro.OrderID = o.OrderID
         AND ro.Status = 'Chấp thuận'
-    WHERE o.Status IN ('Đã xác nhận', 'Đang giao', 'Đã giao', 'Đã nhận')
+    WHERE o.Status IN ('Đã xác nhận', 'Đang giao', 'Đã giao', 'Đã nhận', 'Đã hoàn tiền')
 ");
 
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -161,3 +161,4 @@ $totalCustomers = (int) $pdo->query("
         </div>
     <?php endif; ?>
 </div>
+
