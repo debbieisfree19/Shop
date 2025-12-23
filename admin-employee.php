@@ -46,7 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         /* ===== ADD EMPLOYEE ===== */ else if ($action === 'ajax_add_employee') {
 
             $uid = generateUserID($pdo);
-
+            if (empty($_POST['password'])) {
+                throw new Exception('Mật khẩu không được để trống');
+            }
             $pdo->prepare("
                 INSERT INTO User_Account
                 (UserID, FullName, Username, Email, Phone, Password, Role, Status, CreatedDate)
@@ -205,7 +207,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div class="col-md-6">
                         <label class="account-label">Điện thoại</label>
-                        <input type="text" name="phone" id="emp_phone" class="account-input w-100">
+                        <input type="text" name="phone" id="emp_phone" class="account-input w-100" inputmode="numeric"
+                            pattern="[0-9]*" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
                     </div>
 
                     <div class="col-md-6">
@@ -370,6 +373,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.getElementById('employeeForm').addEventListener('submit', function (e) {
             e.preventDefault();
 
+            const action = document.getElementById('emp_action').value;
+            const passInput = this.querySelector('input[name="password"]');
+
+            // THÊM NHÂN VIÊN → BẮT BUỘC PASSWORD
+            if (action === 'ajax_add_employee' && passInput.value.trim() === '') {
+                alert('Vui lòng nhập mật khẩu cho nhân viên mới');
+                passInput.focus();
+                return;
+            }
+
             const fd = new FormData(this);
 
             fetch('admin-employee.php', {
@@ -379,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 .then(r => r.json())
                 .then(res => {
                     if (!res.success) {
-                        alert(res.message || 'Cập nhật thất bại');
+                        alert(res.message || 'Thao tác thất bại');
                         return;
                     }
 
@@ -390,6 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     loadEmployee();
                 });
         });
+
         document.addEventListener('DOMContentLoaded', loadEmployee);
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

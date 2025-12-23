@@ -271,27 +271,8 @@ $bannerList = $stmt->fetchAll(PDO::FETCH_ASSOC);
 </div>
 
 
-<form method="POST" enctype="multipart/form-data" class="row g-3">
-    <input type="hidden" name="action" value="upload_banner">
-
-    <div class="col-md-6">
-        <label class="account-label">Tiêu đề banner</label>
-        <input type="text" name="banner_title" class="account-input w-100" placeholder="Kệ sách Moonlit">
-    </div>
-
-    <div class="col-md-6">
-        <label class="account-label">Ảnh banner *</label>
-        <input type="file" name="banner_image" class="account-input w-100" accept="image/*" required>
-    </div>
-
-    <div class="col-12 d-flex justify-content-end">
-        <button type="submit" class="account-btn-save">
-            Upload banner
-        </button>
-    </div>
-</form>
-
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
 
 <script src="moonlit.js"></script>
+
