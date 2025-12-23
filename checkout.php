@@ -338,7 +338,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     $note      = trim($_POST['note'] ?? '');
     $payment   = trim($_POST['payment_method'] ?? 'cod');
 
-
     $shippingCity     = trim($_POST['shipping_city'] ?? '');
     $shippingDistrict = trim($_POST['shipping_district'] ?? '');
     $shippingWard     = trim($_POST['shipping_ward'] ?? '');
@@ -354,8 +353,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     if ($shippingStreet === '')   $form_errors[] = 'Vui lòng nhập Tên đường.';
     if ($shippingNumber === '')   $form_errors[] = 'Vui lòng nhập Số nhà.';
 
-    if (empty($products))  $form_errors[] = 'Giỏ hàng trống, không thể đặt hàng.';
-    if (!$selectedCarrierId) $form_errors[] = 'Vui lòng chọn đơn vị vận chuyển.';
+    if (empty($products))       $form_errors[] = 'Giỏ hàng trống, không thể đặt hàng.';
+    if (!$selectedCarrierId)    $form_errors[] = 'Vui lòng chọn đơn vị vận chuyển.';
 
     if ($voucherCodeInput !== '' && $voucherError !== '') {
         $form_errors[] = $voucherError;
@@ -378,7 +377,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 throw new Exception('Giỏ hàng đã trống (có thể bạn vừa đặt ở tab khác).');
             }
 
-            // 1) insert Order
+            // 1) LOCK + CHECK STOCK (chặn bán âm / đặt 2 tab)
+            $lockSku = $pdo->prepare("
+                SELECT Stock, Status
+                FROM SKU
+                WHERE SKUID = :skuid
+                FOR UPDATE
+            ");
+
+            foreach ($products as $p) {
+                $lockSku->execute([':skuid' => $p['SKUID']]);
+                $rowSku = $lockSku->fetch(PDO::FETCH_ASSOC);
+
+                if (!$rowSku) {
+                    throw new Exception("SKU {$p['SKUID']} không tồn tại.");
+                }
+
+                if ((int)$rowSku['Status'] !== 1) {
+                    throw new Exception("SKU {$p['SKUID']} đang bị ẩn/tắt bán.");
+                }
+
+                $stock = (int)$rowSku['Stock'];
+                $need  = (int)$p['Quantity'];
+
+                if ($stock < $need) {
+                    throw new Exception("SKU {$p['SKUID']} không đủ tồn kho. Tồn: {$stock}, cần: {$need}");
+                }
+            }
+
+            // 2) insert Order
             $orderId = gen_id6();
 
             $insOrder = $pdo->prepare("
@@ -396,16 +423,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                     NOW(), NULL, :note
                 )
             ");
+
             $insOrder->execute([
                 ':oid'          => $orderId,
                 ':uid'          => $userId,
-
-                // TotalAmount: tạm tính (tiền hàng)
-                ':total'        => $subTotal,
-
-                // TotalAmountAfterVoucher: tổng cuối cùng phải trả = sau voucher + ship
-                ':afterVoucher' => $grandTotal,
-
+                ':total'        => (float)$subTotal,     // tiền hàng
+                ':afterVoucher' => (float)$grandTotal,   // tiền cuối = sau voucher + ship
                 ':status'       => 'Chờ xác nhận',
                 ':pay'          => $payment,
                 ':city'         => $shippingCity,
@@ -416,7 +439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':note'         => $note,
             ]);
 
-            // 2) insert Order_Items
+            // 3) insert Order_Items
             $insItem = $pdo->prepare("
                 INSERT INTO Order_Items (OrderID, SKU_ID, Quantity, UnitPrice, DiscountedPrice, TotalPrice)
                 VALUES (:oid, :skuid, :qty, :u, :d, :t)
@@ -433,7 +456,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ]);
             }
 
-            // 3) insert Shipping_Order
+            // 4) TRỪ TỒN KHO SKU + CỘNG SOLDQUANTITY PRODUCT
+            $decStock = $pdo->prepare("
+                UPDATE SKU
+                SET Stock = Stock - :qty_dec
+                WHERE SKUID = :skuid
+                AND Status = 1
+                AND Stock >= :qty_chk
+            ");
+
+
+            $incSold = $pdo->prepare("
+                UPDATE Product p
+                JOIN SKU s ON s.ProductID = p.ProductID
+                SET p.SoldQuantity = COALESCE(p.SoldQuantity, 0) + :qty
+                WHERE s.SKUID = :skuid
+            ");
+
+            foreach ($products as $p) {
+                $qty = (int)$p['Quantity'];
+                $sk  = $p['SKUID'];
+
+                $decStock->execute([
+                    ':qty_dec' => $qty,
+                    ':qty_chk' => $qty,
+                    ':skuid'   => $sk
+                ]);
+
+
+                $incSold->execute([':qty' => $qty, ':skuid' => $sk]);
+            }
+
+            // 5) insert Shipping_Order
             $shippingId = gen_id6();
             $insShip = $pdo->prepare("
                 INSERT INTO Shipping_Order (
@@ -451,42 +505,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 ':status' => 'Pending'
             ]);
 
-            // 4) voucher 
-                if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
+            // 6) voucher
+            if ($voucher && $voucherError === '' && !empty($voucher['VoucherID'])) {
 
-                    if (empty($userVoucherId)) {
-                        // an toàn: nếu không có UserVoucherID thì không cho dùng
-                        throw new Exception('Không xác định được User_Voucher để gắn vào đơn.');
-                    }
-
-                    // ✅ gắn voucher của user vào đơn (đánh dấu đã dùng)
-                    $upd = $pdo->prepare("
-                        UPDATE User_Voucher
-                        SET OrderID = :oid
-                        WHERE ID = :uvId
-                        AND UserID = :uid
-                        AND OrderID IS NULL
-                    ");
-                    $upd->execute([
-                        ':oid'  => $orderId,
-                        ':uvId' => $userVoucherId,
-                        ':uid'  => $userId
-                    ]);
-
-                    if ($upd->rowCount() <= 0) {
-                        throw new Exception('Voucher đã được sử dụng hoặc không thuộc tài khoản của bạn.');
-                    }
-
-                    // ✅ tăng usedcount tổng (nếu bạn cần)
-                    $pdo->prepare("
-                        UPDATE Voucher
-                        SET UsedCount = IFNULL(UsedCount, 0) + 1
-                        WHERE VoucherID = :vid
-                    ")->execute([':vid' => $voucher['VoucherID']]);
+                if (empty($userVoucherId)) {
+                    throw new Exception('Không xác định được User_Voucher để gắn vào đơn.');
                 }
 
+                $upd = $pdo->prepare("
+                    UPDATE User_Voucher
+                    SET OrderID = :oid
+                    WHERE ID = :uvId
+                      AND UserID = :uid
+                      AND OrderID IS NULL
+                ");
+                $upd->execute([
+                    ':oid'  => $orderId,
+                    ':uvId' => $userVoucherId,
+                    ':uid'  => $userId
+                ]);
 
-            // 5) clear cart items
+                if ($upd->rowCount() <= 0) {
+                    throw new Exception('Voucher đã được sử dụng hoặc không thuộc tài khoản của bạn.');
+                }
+
+                $pdo->prepare("
+                    UPDATE Voucher
+                    SET UsedCount = IFNULL(UsedCount, 0) + 1
+                    WHERE VoucherID = :vid
+                ")->execute([':vid' => $voucher['VoucherID']]);
+            }
+
+            // 7) clear cart items
             $pdo->prepare("
                 DELETE ci FROM Cart_Items ci
                 JOIN Cart c ON ci.CartID = c.CartID
@@ -514,6 +564,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         }
     }
 }
+
 
 $prefill_city     = $_POST['shipping_city'] ?? ($userProfile['ShippingCity'] ?? '');
 $prefill_district = $_POST['shipping_district'] ?? ($userProfile['ShippingDistrict'] ?? '');
@@ -1060,6 +1111,4 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
 
 </body>
 </html>
-
-
 
