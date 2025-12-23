@@ -26,7 +26,7 @@ function calculateUserRank($pdo, $user_id) {
         SELECT (SUM(o.TotalAmount) - COALESCE(SUM(ro.TotalRefund), 0)) as total_spent
         FROM `Order` o
         LEFT JOIN Returns_Order ro ON o.OrderID = ro.OrderID AND ro.Status = 'Chấp thuận'
-        WHERE o.UserID = ? AND o.Status IN ('Đã nhận', 'Trả hàng')
+        WHERE o.UserID = ? AND o.Status IN ('Đã nhận', 'Đã hoàn tiền')
     ");
     $stmt->execute([$user_id]);
     $result = $stmt->fetch();
