@@ -59,7 +59,6 @@ try {
     $row = $uStmt->fetch(PDO::FETCH_ASSOC);
     if ($row) {
         $userProfile = array_merge($userProfile, array_filter($row, fn($v) => $v !== null));
-        if (!empty($userProfile['FullName'])) $currentUsername = $userProfile['FullName'];
     }
 } catch (Exception $e) {
     
@@ -1061,4 +1060,5 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
 
 </body>
 </html>
+
 
