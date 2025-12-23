@@ -177,32 +177,29 @@ SELECT
     u.Phone,
     u.Points,
 
-    COALESCE(SUM(o.TotalAmount), 0)
-    - COALESCE(SUM(CASE WHEN ro.Status = 'Chấp thuận' THEN ro.TotalRefund ELSE 0 END), 0)
-        AS TotalSpent,
+    COALESCE(SUM(o.TotalAmount - COALESCE(r.refund, 0)), 0) AS TotalSpent,
 
     CASE
-        WHEN (COALESCE(SUM(o.TotalAmount), 0)
-              - COALESCE(SUM(CASE WHEN ro.Status = 'Chấp thuận' THEN ro.TotalRefund ELSE 0 END), 0)) < 100000
-            THEN 'Member'
-        WHEN (COALESCE(SUM(o.TotalAmount), 0)
-              - COALESCE(SUM(CASE WHEN ro.Status = 'Chấp thuận' THEN ro.TotalRefund ELSE 0 END), 0)) < 200000
-            THEN 'Bronze'
-        WHEN (COALESCE(SUM(o.TotalAmount), 0)
-              - COALESCE(SUM(CASE WHEN ro.Status = 'Chấp thuận' THEN ro.TotalRefund ELSE 0 END), 0)) < 300000
-            THEN 'Silver'
-        WHEN (COALESCE(SUM(o.TotalAmount), 0)
-              - COALESCE(SUM(CASE WHEN ro.Status = 'Chấp thuận' THEN ro.TotalRefund ELSE 0 END), 0)) < 400000
-            THEN 'Gold'
+        WHEN COALESCE(SUM(o.TotalAmount - COALESCE(r.refund, 0)), 0) < 100000 THEN 'Member'
+        WHEN COALESCE(SUM(o.TotalAmount - COALESCE(r.refund, 0)), 0) < 200000 THEN 'Bronze'
+        WHEN COALESCE(SUM(o.TotalAmount - COALESCE(r.refund, 0)), 0) < 300000 THEN 'Silver'
+        WHEN COALESCE(SUM(o.TotalAmount - COALESCE(r.refund, 0)), 0) < 400000 THEN 'Gold'
         ELSE 'Platinum'
     END AS RankName
 
 FROM User_Account u
 LEFT JOIN `Order` o
        ON u.UserID = o.UserID
-      AND o.Status IN ('Đã nhận', 'Trả hàng')
-LEFT JOIN Returns_Order ro
-       ON o.OrderID = ro.OrderID
+      AND o.Status IN ('Đã nhận', 'Đã hoàn tiền')
+
+LEFT JOIN (
+    SELECT
+        OrderID,
+        SUM(TotalRefund) AS refund
+    FROM Returns_Order
+    WHERE Status = 'Chấp thuận'
+    GROUP BY OrderID
+) r ON o.OrderID = r.OrderID
 
 WHERE u.Role = 'Customer'
 
@@ -214,7 +211,7 @@ GROUP BY
     u.Phone,
     u.Points
 
-ORDER BY TotalSpent DESC
+ORDER BY TotalSpent DESC;
 ";
 
 $stmt = $pdo->query($sql);
@@ -421,3 +418,4 @@ $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     </script>
 </body>
+
