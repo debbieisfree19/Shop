@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         WHERE OrderID = ? AND UserID = ? AND Status = 'Đã giao'
     ");
     if ($stmt_update->execute([$order_id_confirm, $user_id])) {
-        header("Refresh:0"); 
+        echo "<script>alert('Đã xác nhận nhận hàng thành công!'); window.location.href = window.location.href;</script>";
         exit;
     }
 }
@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         WHERE OrderID = ? AND UserID = ? AND Status = 'Chờ xác nhận'
     ");
     if ($stmt_cancel->execute([$cancel_reason, $order_id_cancel, $user_id])) {
+        echo "<script>alert('Đã hủy đơn hàng thành công!'); window.location.href = window.location.href;</script>";
         exit;
     }
 }
@@ -61,6 +62,7 @@ $stmt = $pdo->prepare("
         oi.UnitPrice,
         p.ProductName,
         p.Image,
+        p.ImageUrl,   
         s.Format,
         s.ISBN,
         c.CarrierName,
@@ -119,6 +121,7 @@ foreach ($orders as $order) {
         $grouped_orders[$order_id]['Items'][] = [
             'ProductName' => $order['ProductName'],
             'Image' => $order['Image'],
+            'ImageUrl' => $order['ImageUrl'],
             'Format' => $order['Format'],
             'ISBN' => $order['ISBN'],
             'Quantity' => $order['Quantity'],
@@ -216,6 +219,10 @@ $status_config = [
                                 <?php if (!empty($item['Image'])): ?>
                                     <div class="account-order-item-image">
                                         <img src="data:image/jpeg;base64,<?php echo base64_encode($item['Image']); ?>" alt="<?php echo htmlspecialchars($item['ProductName']); ?>">
+                                    </div>
+                                <?php elseif (!empty($item['ImageUrl'])): ?>
+                                    <div class="account-order-item-image">
+                                        <img src="<?php echo htmlspecialchars($item['ImageUrl']); ?>" alt="<?php echo htmlspecialchars($item['ProductName']); ?>">
                                     </div>
                                 <?php else: ?>
                                     <div class="account-order-item-image account-order-item-image-empty">

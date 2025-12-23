@@ -328,7 +328,7 @@ if (!empty($page_order_ids)) {
             o.ShippingCity, o.ShippingDistrict, o.ShippingWard, o.ShippingStreet, o.ShippingNumber,
             o.CreatedDate, o.DateReceived,
             oi.OrderItemID, oi.Quantity, oi.UnitPrice, oi.DiscountedPrice,
-            p.ProductName, p.Image, s.Format, s.ISBN, p.ProductID, s.SKUID,
+            p.ProductName, p.Image, p.ImageUrl, s.Format, s.ISBN, p.ProductID, s.SKUID,
             c.CarrierName, c.ShippingPrice,
             v.DiscountValue, v.DiscountType  
         FROM `Order` o
@@ -378,6 +378,7 @@ if (!empty($page_order_ids)) {
                 'OrderItemID' => $order['OrderItemID'],
                 'ProductName' => $order['ProductName'],
                 'Image' => $order['Image'],
+                'ImageUrl' => $order['ImageUrl'],
                 'Format' => $order['Format'],
                 'ISBN' => $order['ISBN'],
                 'Quantity' => $order['Quantity'],
@@ -495,6 +496,10 @@ if (!empty($page_order_ids)) {
                                 <?php if (!empty($item['Image'])): ?>
                                     <div class="account-order-item-image">
                                         <img src="data:image/jpeg;base64,<?php echo base64_encode($item['Image']); ?>" alt="<?php echo htmlspecialchars($item['ProductName']); ?>">
+                                    </div>
+                                <?php elseif (!empty($item['ImageUrl'])): ?>
+                                    <div class="account-order-item-image">
+                                        <img src="<?php echo htmlspecialchars($item['ImageUrl']); ?>" alt="<?php echo htmlspecialchars($item['ProductName']); ?>">
                                     </div>
                                 <?php else: ?>
                                     <div class="account-order-item-image account-order-item-image-empty">

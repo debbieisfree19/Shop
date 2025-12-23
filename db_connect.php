@@ -4,7 +4,7 @@
  */
 
 $DB_HOST = 'localhost';
-$DB_NAME = 'moonlit'; // nhớ đúng tên DB bà tạo trong file .sql
+$DB_NAME = 'moonlit_store'; // nhớ đúng tên DB bà tạo trong file .sql
 $DB_USER = 'root';          // XAMPP/MAMP thường mặc định là root
 $DB_PASS = '';              // XAMPP mặc định rỗng, nếu bà đặt mật khẩu thì sửa ở đây
 

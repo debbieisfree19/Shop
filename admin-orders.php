@@ -200,7 +200,7 @@ $returnImages = [];
 if (!empty($orderIds)) {
     $inQuery = implode(',', array_fill(0, count($orderIds), '?'));
     $stmtItems = $pdo->prepare("
-        SELECT oi.*, p.ProductName, p.Image, s.Format, s.ISBN 
+        SELECT oi.*, p.ProductName, p.Image, p.ImageUrl, s.Format, s.ISBN 
         FROM Order_Items oi
         LEFT JOIN SKU s ON oi.SKU_ID = s.SKUID
         LEFT JOIN Product p ON s.ProductID = p.ProductID
@@ -370,6 +370,8 @@ if (!empty($orderIds)) {
                                                 <div class="me-3 border rounded overflow-hidden d-flex align-items-center justify-content-center bg-white admin-orders-product-image-box">
                                                     <?php if (!empty($it['Image'])): ?>
                                                         <img src="data:image/jpeg;base64,<?php echo base64_encode($it['Image']); ?>" alt="<?php echo h($it['ProductName']); ?>" class="admin-orders-product-image">
+                                                    <?php elseif (!empty($it['ImageUrl'])): ?>
+                                                        <img src="<?php echo h($it['ImageUrl']); ?>" alt="<?php echo h($it['ProductName']); ?>" class="admin-orders-product-image">
                                                     <?php else: ?>
                                                         <i class="fas fa-image text-muted"></i>
                                                     <?php endif; ?>
