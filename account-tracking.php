@@ -321,19 +321,28 @@ $status_config = [
                         <div class="account-order-total">
                             Tổng tiền: 
                             <?php 
-                            // [LOGIC MỚI] 
-                            // Kiểm tra nếu có giá sau Voucher VÀ nó khác với giá gốc (nghĩa là có áp dụng voucher)
-                            if (!empty($order['TotalAmountAfterVoucher']) && $order['TotalAmountAfterVoucher'] != $order['TotalAmount']) {
+                            // 1. Lấy các giá trị cần thiết
+                            $goods_total = $order['TotalAmount'] ?? 0;      // Tiền hàng
+                            $shipping_fee = $order['ShippingPrice'] ?? 0;   // Tiền ship
+                            $paid_amount = $order['TotalAmountAfterVoucher'] ?? 0; // Tiền khách phải trả cuối cùng (sau voucher)
+
+                            // 2. Tính TỔNG TIỀN GỐC (Hàng + Ship)
+                            $real_total_calculated = $goods_total + $shipping_fee;
+
+                            // 3. Logic hiển thị
+                            // Kiểm tra: Nếu có "Tiền sau voucher" và nó KHÁC với "Tổng tiền gốc" (nghĩa là có áp dụng giảm giá)
+                            if ($paid_amount > 0 && $paid_amount != $real_total_calculated) {
                                 
-                                // 1. Hiển thị giá SAU khi giảm (In đậm, là giá phải trả thực tế)
-                                echo '<strong>' . number_format($order['TotalAmountAfterVoucher'], 0, ',', '.') . ' đ</strong>';
+                                // Hiện số tiền thực trả (In đậm) - Đây là TotalAmountAfterVoucher
+                                echo '<strong>' . number_format($paid_amount, 0, ',', '.') . ' đ</strong>';
                                 
-                                // 2. Hiển thị giá GỐC (Gạch ngang, màu xám)
-                                echo ' <del class="account-order-item-old-price">' . number_format($order['TotalAmount'], 0, ',', '.') . ' đ</del>';
-                                
+                                // Hiện số tiền gốc tự tính (Gạch ngang) - Đây là (TotalAmount + Ship)
+                                echo ' <del class="account-order-item-old-price">' . number_format($real_total_calculated, 0, ',', '.') . ' đ</del>';
+
                             } else {
                                 // Trường hợp không có voucher hoặc giá không đổi
-                                echo '<strong>' . number_format($order['TotalAmount'], 0, ',', '.') . ' đ</strong>';
+                                // Chỉ hiện Tổng tiền gốc tự tính
+                                echo '<strong>' . number_format($real_total_calculated, 0, ',', '.') . ' đ</strong>';
                             }
                             ?>
                         </div>
