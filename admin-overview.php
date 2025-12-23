@@ -11,25 +11,40 @@ $orderStatuses = [
 $stmt = $pdo->query("
     SELECT
         COALESCE(SUM(o.TotalAmount), 0)
-        - COALESCE(SUM(ro.TotalRefund), 0) AS revenue,
+        - COALESCE(SUM(CASE WHEN ro.Status = 'Chấp thuận' THEN ro.TotalRefund ELSE 0 END), 0) AS revenue,
         COUNT(DISTINCT o.OrderID) AS orders
     FROM `Order` o
     LEFT JOIN Returns_Order ro
         ON ro.OrderID = o.OrderID
-        AND ro.Status = 'Chấp thuận'
     WHERE o.Status IN ('Đã xác nhận', 'Đang giao', 'Đã giao', 'Đã nhận', 'Đã hoàn tiền')
 ");
 
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$totalRevenue = $row ? (float)$row['revenue'] : 0;
-$totalOrders  = $row ? (int)$row['orders'] : 0;
-$avgOrder     = $totalOrders ? $totalRevenue / $totalOrders : 0;
+$totalRevenue = $row ? (float) $row['revenue'] : 0;
+$totalOrders = $row ? (int) $row['orders'] : 0;
+$avgOrder = $totalOrders ? $totalRevenue / $totalOrders : 0;
 
 $totalCost = (float) $pdo->query("
-    SELECT COALESCE(SUM(BuyPrice * Stock), 0)
-    FROM SKU
-    WHERE Status = 1
+    SELECT
+        COALESCE(
+            SUM(
+                (oi.Quantity - COALESCE(r.ReturnedQty, 0)) * s.BuyPrice
+            ), 0
+        ) AS Cost
+    FROM Order_Items oi
+    JOIN SKU s ON oi.SKU_ID = s.SKUID
+    JOIN `Order` o ON oi.OrderID = o.OrderID
+    LEFT JOIN (
+        SELECT
+            ri.OrderItemID,
+            SUM(ri.Quantity) AS ReturnedQty
+        FROM Return_Items ri
+        JOIN Returns_Order ro ON ri.ReturnID = ro.ReturnID
+        WHERE ro.Status = 'Chấp thuận'
+        GROUP BY ri.OrderItemID
+    ) r ON oi.OrderItemID = r.OrderItemID
+    WHERE o.Status IN ('Đã giao', 'Đã nhận', 'Đã hoàn tiền')
 ")->fetchColumn();
 
 $profit = $totalRevenue - $totalCost;
@@ -161,4 +176,3 @@ $totalCustomers = (int) $pdo->query("
         </div>
     <?php endif; ?>
 </div>
-
