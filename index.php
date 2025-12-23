@@ -538,8 +538,6 @@ try {
                                                     <?php echo format_price($p['MaxOriginalPrice']); ?>
                                                 </span>
 
-                                                <span class="product-badge-sale">Sale</span>
-
                                             <?php else: ?>
                                                 <?php if ($p['MinDisplayPrice'] == $p['MaxOriginalPrice']): ?>
                                                     <span class="product-price">
@@ -693,5 +691,6 @@ try {
 </body>
 
 </html>
+
 
 

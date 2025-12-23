@@ -542,7 +542,7 @@ if ($product) {
                                         <?php
                                             $vFinal = (float)$v['FinalPrice'];
                                             $vOrig  = (float)$v['OriginalPrice'];
-                                            $label  = ($v['Format'] ?: 'Phiên bản') . ' — ' . number_format($vFinal, 0, ',', '.') . 'đ';
+                                            $label  = ($v['Format'] ?: 'Phiên bản') . ' - ' . number_format($vFinal, 0, ',', '.') . 'đ';
                                             if ($vFinal < $vOrig) $label .= ' (sale)';
                                         ?>
                                         <option value="<?php echo htmlspecialchars($v['SKUID']); ?>"
@@ -796,3 +796,4 @@ if ($product) {
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
