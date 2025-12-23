@@ -1,28 +1,40 @@
 <?php
 $orderStatuses = [
     'Chờ xác nhận' => 'Chờ xác nhận',
-    'Đã xác nhận'  => 'Đã xác nhận / Chờ lấy hàng',
-    'Đang giao'    => 'Đang giao',
-    'Đã giao'      => 'Đã giao',
-    'Đã hoàn tiền'     => 'Trả hàng / Hoàn tiền',
-    'Bị hủy'       => 'Đã hủy',
+    'Đã xác nhận' => 'Đã xác nhận / Chờ lấy hàng',
+    'Đang giao' => 'Đang giao',
+    'Đã giao' => 'Đã giao',
+    'Đã hoàn tiền' => 'Trả hàng / Hoàn tiền',
+    'Bị hủy' => 'Đã hủy',
 ];
 
 $stmt = $pdo->query("
-    SELECT 
-        COALESCE(SUM(TotalAmount),0) revenue,
-        COUNT(*) orders
-    FROM `Order`
-    WHERE Status IN (
-        'Đã xác nhận',
-        'Đang giao',
-        'Đã giao')
+    SELECT
+        COALESCE(SUM(o.TotalAmount), 0)
+        - COALESCE(SUM(ro.TotalRefund), 0) AS revenue,
+        COUNT(DISTINCT o.OrderID) AS orders
+    FROM `Order` o
+    LEFT JOIN Returns_Order ro
+        ON ro.OrderID = o.OrderID
+        AND ro.Status = 'Chấp thuận'
+    WHERE o.Status IN ('Đã xác nhận', 'Đang giao', 'Đã giao', 'Đã nhận')
 ");
+
 $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$totalRevenue = (float)$row['revenue'];
-$totalOrders  = (int)$row['orders'];
+$totalRevenue = $row ? (float)$row['revenue'] : 0;
+$totalOrders  = $row ? (int)$row['orders'] : 0;
 $avgOrder     = $totalOrders ? $totalRevenue / $totalOrders : 0;
+
+$totalCost = (float) $pdo->query("
+    SELECT COALESCE(SUM(BuyPrice * Stock), 0)
+    FROM SKU
+    WHERE Status = 1
+")->fetchColumn();
+
+$profit = $totalRevenue - $totalCost;
+
+
 
 $orderStatusCounts = [];
 $stmt = $pdo->query("
@@ -31,7 +43,7 @@ $stmt = $pdo->query("
     GROUP BY Status
 ");
 while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $orderStatusCounts[$r['Status']] = (int)$r['cnt'];
+    $orderStatusCounts[$r['Status']] = (int) $r['cnt'];
 }
 
 $latestProducts = $pdo->query("
@@ -41,7 +53,7 @@ $latestProducts = $pdo->query("
     LIMIT 10
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-$totalCustomers = (int)$pdo->query("
+$totalCustomers = (int) $pdo->query("
     SELECT COUNT(*) FROM User_Account where Role ='customer'
 ")->fetchColumn();
 ?>
@@ -50,11 +62,30 @@ $totalCustomers = (int)$pdo->query("
     <div class="col-md-3 mb-3">
         <div class="account-card">
             <div class="account-card-title">Doanh thu</div>
-            <p class="fw-bold" style="font-size: 20px;">
-                <?php echo number_format($totalRevenue, 0, ',', '.'); ?> đ
+            <p class="fw-bold fs-5">
+                <?= number_format($totalRevenue, 0, ',', '.') ?> đ
             </p>
         </div>
     </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="account-card">
+            <div class="account-card-title">Chi phí</div>
+            <p class="fw-bold fs-5 text-danger">
+                <?= number_format($totalCost, 0, ',', '.') ?> đ
+            </p>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="account-card">
+            <div class="account-card-title">Lợi nhuận</div>
+            <p class="fw-bold fs-5 text-success">
+                <?= number_format($profit, 0, ',', '.') ?> đ
+            </p>
+        </div>
+    </div>
+
     <div class="col-md-3 mb-3">
         <div class="account-card">
             <div class="account-card-title">Số đơn hàng thành công</div>
