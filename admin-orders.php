@@ -99,6 +99,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($oid) {
                         $pdo->prepare("UPDATE `Order` SET Status = 'Đã hoàn tiền' WHERE OrderID = ?")->execute([$oid]);
                     }
+                    // ------------------------------------------------------------------
+                    // b. [MỚI THÊM] CỘNG LẠI SỐ LƯỢNG (STOCK) VÀO BẢNG SKU
+                    // ------------------------------------------------------------------
+                    
+                    // B1: Lấy danh sách sản phẩm trả và SKU_ID tương ứng
+                    // Ta phải JOIN Return_Items với Order_Items để lấy SKU_ID
+                    $sqlGetReturnItems = "
+                        SELECT ri.Quantity, oi.SKU_ID 
+                        FROM Return_Items ri
+                        JOIN Order_Items oi ON ri.OrderItemID = oi.OrderItemID
+                        WHERE ri.ReturnID = ?
+                    ";
+                    $stmtItems = $pdo->prepare($sqlGetReturnItems);
+                    $stmtItems->execute([$returnId]);
+                    $itemsToRestock = $stmtItems->fetchAll(PDO::FETCH_ASSOC);
+
+                    // B2: Chuẩn bị câu lệnh cập nhật Stock
+                    $stmtUpdateStock = $pdo->prepare("UPDATE SKU SET Stock = Stock + ? WHERE SKUID = ?");
+
+                    // B3: Duyệt qua từng sản phẩm và cộng lại kho
+                    foreach ($itemsToRestock as $item) {
+                        // Chỉ cập nhật nếu có SKU_ID và số lượng > 0
+                        if (!empty($item['SKU_ID']) && $item['Quantity'] > 0) {
+                            $stmtUpdateStock->execute([$item['Quantity'], $item['SKU_ID']]);
+                        }
+                    }
                 }
                 
                 $pdo->commit();
