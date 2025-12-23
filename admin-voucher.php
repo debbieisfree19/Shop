@@ -66,15 +66,40 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_voucher') {
     $v_id = $_POST['voucher_id'];
     try {
-        // Kiểm tra xem voucher có đang inactive không
+        // BƯỚC 1: Kiểm tra xem voucher có đang Inactive không
         $checkStmt = $pdo->prepare("SELECT Status FROM Voucher WHERE VoucherID = :id");
         $checkStmt->execute([':id' => $v_id]);
         $vStatus = $checkStmt->fetchColumn();
 
         if ($vStatus === 0 || $vStatus === '0') {
-            $delStmt = $pdo->prepare("DELETE FROM Voucher WHERE VoucherID = :id");
-            $delStmt->execute([':id' => $v_id]);
-            $message = "Đã xóa voucher thành công!";
+            
+            // BƯỚC 2: Kiểm tra bảng User_Voucher
+            // Logic: Nếu OrderID không phải NULL nghĩa là voucher đã được gán vào đơn hàng
+            $checkUsageStmt = $pdo->prepare("
+                SELECT COUNT(*) 
+                FROM User_Voucher 
+                WHERE VoucherID = :id 
+                  AND OrderID IS NOT NULL 
+                  AND OrderID != ''
+            ");
+            $checkUsageStmt->execute([':id' => $v_id]);
+            $usedCount = $checkUsageStmt->fetchColumn();
+
+            if ($usedCount > 0) {
+                // Nếu tìm thấy dòng nào có OrderID -> Không cho xóa
+                $error = "Không thể xóa: Voucher này đã được sử dụng trong đơn hàng!";
+            } else {
+                // BƯỚC 3: Nếu chưa có OrderID nào liên quan (hoặc chỉ mới lưu mà chưa mua) -> Xóa
+                
+                // (Tùy chọn) Xóa các record 'lưu voucher' trong User_Voucher trước để tránh lỗi khóa ngoại
+                $pdo->prepare("DELETE FROM User_Voucher WHERE VoucherID = :id")->execute([':id' => $v_id]);
+
+                // Xóa Voucher chính
+                $delStmt = $pdo->prepare("DELETE FROM Voucher WHERE VoucherID = :id");
+                $delStmt->execute([':id' => $v_id]);
+                $message = "Đã xóa voucher thành công!";
+            }
+
         } else {
             $error = "Chỉ có thể xóa Voucher đang ngưng hoạt động (Inactive)!";
         }
@@ -154,7 +179,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && ($_POST[
         } else {
             // --- LOGIC CẬP NHẬT ---
             $voucher_id = $_POST['voucher_id']; // ID lấy từ hidden field
-            
+            // [MỚI] KIỂM TRA ĐIỀU KIỆN TRƯỚC KHI UPDATE
+            // Kiểm tra xem VoucherID đã có OrderID nào trong bảng User_Voucher chưa
+            $checkOrderStmt = $pdo->prepare("
+                SELECT COUNT(*) 
+                FROM User_Voucher 
+                WHERE VoucherID = :id 
+                  AND OrderID IS NOT NULL 
+                  AND OrderID != ''
+            ");
+            $checkOrderStmt->execute([':id' => $voucher_id]);
+            $hasOrder = $checkOrderStmt->fetchColumn();
+
+            if ($hasOrder > 0) {
+                // Nếu đã có đơn hàng -> Ném lỗi để nhảy xuống catch -> Không update
+                throw new Exception("Không thể chỉnh sửa: Voucher này đã được áp dụng trong đơn hàng!");
+            }
             $sql = "UPDATE Voucher SET 
                 VoucherName = :name, Code = :code, Description = :desc, DiscountType = :type, 
                 DiscountValue = :val, MinOrder = :min, MaxDiscount = :max, 
