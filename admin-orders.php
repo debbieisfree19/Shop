@@ -89,40 +89,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("UPDATE Returns_Order SET Status = ? WHERE ReturnID = ?");
                 $stmt->execute([$newReturnStatus, $returnId]);
                 
-                // 2. [LOGIC MỚI] Nếu chọn "Chấp thuận" -> Tự động đổi Order Status thành "Đã hoàn tiền"
+                // 2. [LOGIC MỚI] Nếu chọn "Chấp thuận" -> Xử lý hoàn tiền, hoàn kho, hoàn điểm
                 if ($newReturnStatus === 'Chấp thuận') {
-                    // Lấy OrderID từ ReturnID
-                    $stmtGetOrder = $pdo->prepare("SELECT OrderID FROM Returns_Order WHERE ReturnID = ?");
-                    $stmtGetOrder->execute([$returnId]);
-                    $oid = $stmtGetOrder->fetchColumn();
+                    // Lấy thông tin cần thiết: OrderID, UserID, TotalRefund
+                    // (Phải JOIN bảng Order để lấy UserID chính xác)
+                    $stmtGetInfo = $pdo->prepare("
+                        SELECT ro.OrderID, ro.TotalRefund, o.UserID 
+                        FROM Returns_Order ro
+                        JOIN `Order` o ON ro.OrderID = o.OrderID
+                        WHERE ro.ReturnID = ?
+                    ");
+                    $stmtGetInfo->execute([$returnId]);
+                    $retInfo = $stmtGetInfo->fetch(PDO::FETCH_ASSOC);
                     
-                    if ($oid) {
+                    if ($retInfo) {
+                        $oid = $retInfo['OrderID'];
+                        $uId = $retInfo['UserID'];
+                        $refundAmount = $retInfo['TotalRefund'];
+
+                        // a. Cập nhật trạng thái đơn hàng chính thành "Đã hoàn tiền"
                         $pdo->prepare("UPDATE `Order` SET Status = 'Đã hoàn tiền' WHERE OrderID = ?")->execute([$oid]);
-                    }
-                    // ------------------------------------------------------------------
-                    // b. [MỚI THÊM] CỘNG LẠI SỐ LƯỢNG (STOCK) VÀO BẢNG SKU
-                    // ------------------------------------------------------------------
-                    
-                    // B1: Lấy danh sách sản phẩm trả và SKU_ID tương ứng
-                    // Ta phải JOIN Return_Items với Order_Items để lấy SKU_ID
-                    $sqlGetReturnItems = "
-                        SELECT ri.Quantity, oi.SKU_ID 
-                        FROM Return_Items ri
-                        JOIN Order_Items oi ON ri.OrderItemID = oi.OrderItemID
-                        WHERE ri.ReturnID = ?
-                    ";
-                    $stmtItems = $pdo->prepare($sqlGetReturnItems);
-                    $stmtItems->execute([$returnId]);
-                    $itemsToRestock = $stmtItems->fetchAll(PDO::FETCH_ASSOC);
 
-                    // B2: Chuẩn bị câu lệnh cập nhật Stock
-                    $stmtUpdateStock = $pdo->prepare("UPDATE SKU SET Stock = Stock + ? WHERE SKUID = ?");
+                        // ------------------------------------------------------------------
+                        // b. CỘNG LẠI SỐ LƯỢNG (STOCK) VÀO BẢNG SKU
+                        // ------------------------------------------------------------------
+                        $sqlGetReturnItems = "
+                            SELECT ri.Quantity, oi.SKU_ID 
+                            FROM Return_Items ri
+                            JOIN Order_Items oi ON ri.OrderItemID = oi.OrderItemID
+                            WHERE ri.ReturnID = ?
+                        ";
+                        $stmtItems = $pdo->prepare($sqlGetReturnItems);
+                        $stmtItems->execute([$returnId]);
+                        $itemsToRestock = $stmtItems->fetchAll(PDO::FETCH_ASSOC);
 
-                    // B3: Duyệt qua từng sản phẩm và cộng lại kho
-                    foreach ($itemsToRestock as $item) {
-                        // Chỉ cập nhật nếu có SKU_ID và số lượng > 0
-                        if (!empty($item['SKU_ID']) && $item['Quantity'] > 0) {
-                            $stmtUpdateStock->execute([$item['Quantity'], $item['SKU_ID']]);
+                        $stmtUpdateStock = $pdo->prepare("UPDATE SKU SET Stock = Stock + ? WHERE SKUID = ?");
+                        foreach ($itemsToRestock as $item) {
+                            if (!empty($item['SKU_ID']) && $item['Quantity'] > 0) {
+                                $stmtUpdateStock->execute([$item['Quantity'], $item['SKU_ID']]);
+                            }
+                        }
+
+                        // ------------------------------------------------------------------
+                        // c. [MỚI THÊM] TRỪ ĐIỂM TÍCH LŨY (POINT) CỦA USER
+                        // ------------------------------------------------------------------
+                        // Tạo lý do định danh
+                        $deductReason = 'Hoàn điểm trả hàng ' . $oid;
+
+                        // Kiểm tra xem đã trừ điểm chưa để tránh trừ 2 lần
+                        $stmtCheckPoint = $pdo->prepare("SELECT COUNT(*) FROM Point_History WHERE UserID = ? AND Reason = ?");
+                        $stmtCheckPoint->execute([$uId, $deductReason]);
+
+                        if ($stmtCheckPoint->fetchColumn() == 0) {
+                            // Tính số điểm cần trừ (10.000đ = 1 điểm)
+                            $pointsDeducted = floor($refundAmount / 10000);
+
+                            if ($pointsDeducted > 0) {
+                                // Trừ điểm trong tài khoản (Cho phép âm)
+                                $pdo->prepare("UPDATE User_Account SET Points = Points - ? WHERE UserID = ?")
+                                    ->execute([$pointsDeducted, $uId]);
+
+                                // Ghi lịch sử (Số âm)
+                                $pdo->prepare("INSERT INTO Point_History (UserID, PointChange, Reason, CreatedDate) VALUES (?, ?, ?, NOW())")
+                                    ->execute([$uId, -$pointsDeducted, $deductReason]);
+                            } else {
+                                // Nếu số tiền hoàn quá nhỏ không đủ 1 điểm, ghi log 0 để đánh dấu đã xử lý
+                                $pdo->prepare("INSERT INTO Point_History (UserID, PointChange, Reason, CreatedDate) VALUES (?, 0, ?, NOW())")
+                                    ->execute([$uId, $deductReason]);
+                            }
                         }
                     }
                 }

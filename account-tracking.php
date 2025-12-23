@@ -21,8 +21,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         WHERE OrderID = ? AND UserID = ? AND Status = 'Đã giao'
     ");
     if ($stmt_update->execute([$order_id_confirm, $user_id])) {
-        echo "<script>alert('Đã xác nhận nhận hàng thành công!'); window.location.href = window.location.href;</script>";
+        if ($stmt_update->execute([$order_id_confirm, $user_id])) {
+        
+        // ==================================================================
+        // BẮT ĐẦU: LOGIC CỘNG ĐIỂM (DÁN ĐOẠN CODE CỦA BẠN VÀO ĐÂY)
+        // ==================================================================
+        try {
+            // 1. Lấy thông tin số tiền của đơn hàng này
+            // Lưu ý: Mình dùng $order_id_confirm cho khớp với biến ở trên
+            $stmtGetOrder = $pdo->prepare("SELECT TotalAmount, TotalAmountAfterVoucher FROM `Order` WHERE OrderID = ? AND UserID = ?");
+            $stmtGetOrder->execute([$order_id_confirm, $user_id]);
+            $orderData = $stmtGetOrder->fetch();
+        
+            if ($orderData) {
+                // Tùy chọn: Nên tính điểm dựa trên số tiền THỰC TRẢ (Sau voucher) nếu có
+                // Nếu TotalAmountAfterVoucher > 0 thì dùng nó, ngược lại dùng TotalAmount
+                $amountToCalc = ($orderData['TotalAmountAfterVoucher'] > 0) ? $orderData['TotalAmountAfterVoucher'] : $orderData['TotalAmount'];
+                
+                // 2. Tính số điểm (10.000đ = 1 điểm)
+                $pointsEarned = floor($amountToCalc / 10000);
+                $reasonString = 'Tích điểm đơn hàng ' . $order_id_confirm;
+        
+                // 3. Kiểm tra xem đơn này đã từng được cộng điểm chưa
+                $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM Point_History WHERE UserID = ? AND Reason = ?");
+                $stmtCheck->execute([$user_id, $reasonString]);
+        
+                if ($stmtCheck->fetchColumn() == 0 && $pointsEarned > 0) {
+                    // 4. Cộng điểm và ghi lịch sử
+                    $pdo->beginTransaction(); 
+                    
+                    // Cập nhật điểm tích lũy
+                    $updateUser = $pdo->prepare("UPDATE User_Account SET Points = Points + ? WHERE UserID = ?");
+                    $updateUser->execute([$pointsEarned, $user_id]);
+        
+                    // Ghi lịch sử
+                    $insertHistory = $pdo->prepare("INSERT INTO Point_History (UserID, PointChange, Reason, CreatedDate) VALUES (?, ?, ?, NOW())");
+                    $insertHistory->execute([$user_id, $pointsEarned, $reasonString]);
+        
+                    $pdo->commit();
+                }
+            }
+        } catch (Exception $e) {
+            // Nếu lỗi cộng điểm thì rollback, nhưng KHÔNG dừng luồng chính (khách vẫn nhận được thông báo thành công đơn hàng)
+            if ($pdo->inTransaction()) $pdo->rollBack();
+        }
+        // ==================================================================
+        // KẾT THÚC LOGIC CỘNG ĐIỂM
+        // ==================================================================
+
+        // Sau khi cộng điểm xong thì mới Alert và Reload
+        echo "<script>alert('Đã xác nhận nhận hàng và tích điểm thành công!'); window.location.href = window.location.href;</script>";
         exit;
+        }
     }
 }
 
