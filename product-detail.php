@@ -1,11 +1,4 @@
 <?php
-/**
- * MOONLIT STORE - PRODUCT DETAIL PAGE (DB NEW - SALE ONLY IN PRODUCT_SALE)
- * - Product + SKU variants
- * - FinalPrice = active PRODUCT_SALE.DiscountedPrice else SKU.SellPrice
- * - Show old price (SellPrice) with strikethrough when on sale
- * - Review submit fixed (load product first)
- */
 
 session_start();
 require_once 'db_connect.php';
@@ -132,7 +125,7 @@ $canReview = false;
 
 if ($isLoggedIn && $product) {
     try {
-        $allowedStatuses = ["Đã nhận", "Bị hủy", "Trả hàng", "Đã hoàn tiền"];
+        $allowedStatuses = ["Đã nhận", "Trả hàng", "Đã hoàn tiền"];
 
         // Tìm xem user có đơn nào thuộc các trạng thái trên + có chứa SKU của product này không
         $canReviewSql = "
@@ -142,7 +135,7 @@ if ($isLoggedIn && $product) {
             JOIN SKU s ON s.SKUID = oi.SKU_ID
             WHERE o.UserID = :uid
               AND s.ProductID = :pid
-              AND o.Status IN ('Đã nhận', 'Bị hủy', 'Trả hàng', 'Đã hoàn tiền')
+              AND o.Status IN ('Đã nhận', 'Trả hàng', 'Đã hoàn tiền')
             LIMIT 1
         ";
 
@@ -174,7 +167,7 @@ if ($product && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
     } else {
 
         // 1) Check quyền review: đã mua + status hợp lệ
-        $allowedStatuses = ['Đã nhận', 'Bị hủy', 'Trả hàng', 'Đã hoàn tiền'];
+        $allowedStatuses = ['Đã nhận', 'Trả hàng', 'Đã hoàn tiền'];
 
         try {
             $placeholders = implode(',', array_fill(0, count($allowedStatuses), '?'));
@@ -197,7 +190,7 @@ if ($product && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
             $canReview = (int)$stmtCan->fetchColumn() > 0;
 
             if (!$canReview) {
-                $review_error = 'Bạn chỉ có thể đánh giá khi đơn hàng của bạn ở trạng thái: Đã nhận / Bị hủy / Trả hàng / Đã hoàn tiền.';
+                $review_error = 'Bạn chỉ có thể đánh giá khi đơn hàng của bạn ở trạng thái: Đã nhận / Trả hàng / Đã hoàn tiền.';
             }
         } catch (Exception $e) {
             $review_error = 'Không thể kiểm tra quyền đánh giá. Thử lại sau nha.';

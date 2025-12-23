@@ -217,13 +217,13 @@ if (!$selectedCarrier && !empty($carriers)) {
    APPLY VOUCHER
 ========================= */
 $voucher = null;
-$userVoucherId = null; // ✅ thêm dòng này
+$userVoucherId = null; // thêm dòng này
 $voucherError = '';
 $discountAmount = 0.0;
 
 if ($voucherCodeInput !== '' && $subTotal > 0) {
     try {
-        // ✅ LẤY voucher theo User_Voucher (thuộc user & chưa dùng)
+        // LẤY voucher theo User_Voucher (thuộc user & chưa dùng)
         $vSql = "
             SELECT
                 uv.ID AS UserVoucherID,
@@ -247,7 +247,7 @@ if ($voucherCodeInput !== '' && $subTotal > 0) {
         if (!$voucher) {
             $voucherError = 'Voucher này không thuộc tài khoản của bạn hoặc đã được sử dụng.';
         } else {
-            $userVoucherId = $voucher['UserVoucherID']; // ✅ lưu lại để khi đặt hàng update
+            $userVoucherId = $voucher['UserVoucherID']; // ưu lại để khi đặt hàng update
 
             // giữ nguyên các check còn lại
             if ((int)$voucher['Status'] !== 1) {
@@ -400,8 +400,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
             $insOrder->execute([
                 ':oid'          => $orderId,
                 ':uid'          => $userId,
+
+                // TotalAmount: tạm tính (tiền hàng)
                 ':total'        => $subTotal,
-                ':afterVoucher' => $totalAfterVoucher,
+
+                // TotalAmountAfterVoucher: tổng cuối cùng phải trả = sau voucher + ship
+                ':afterVoucher' => $grandTotal,
+
                 ':status'       => 'Chờ xác nhận',
                 ':pay'          => $payment,
                 ':city'         => $shippingCity,
@@ -1056,3 +1061,4 @@ $prefill_name  = $_POST['full_name'] ?? ($userProfile['FullName'] ?? $currentUse
 
 </body>
 </html>
+

@@ -4032,3 +4032,166 @@ img {
     padding: 14px 14px 16px;
   }
 }
+
+
+
+/* =========================
+   CART - TABLET RESPONSIVE
+   ========================= */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* khoảng cách chung */
+  .cart-main {
+    padding: 20px 0 34px;
+  }
+
+  .cart-layout {
+    gap: 16px;
+  }
+
+  /* cột phải đừng bị quá to/nhảy */
+  .cart-summary {
+    flex: 1 1 320px;
+  }
+
+  /* thu nhỏ cột và cho text không tràn */
+  .cart-items-card,
+  .cart-summary-card {
+    padding: 14px 14px 16px;
+  }
+
+  /* TABLE HEADER + ITEM: chỉnh tỉ lệ cột để không bị chật */
+  .cart-table-header,
+  .cart-item {
+    grid-template-columns: 2.2fr 0.9fr 0.9fr 0.9fr 0.6fr;
+    gap: 10px;
+  }
+
+  /* tên sp dài thì cắt dòng đẹp */
+  .cart-item-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;     /* tối đa 2 dòng */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.35;
+  }
+
+  /* ảnh gọn lại cho tablet */
+  .cart-item-image {
+    width: 56px;
+    height: 56px;
+  }
+
+  /* qty input rộng vừa phải */
+  .cart-item-qty {
+    max-width: 120px;
+  }
+
+  .cart-qty-input {
+    padding: 6px 8px;
+  }
+
+  /* nút trong summary nằm gọn + full width cho dễ bấm */
+  .cart-checkout-btn {
+    width: 100%;
+    display: block;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* nếu trong summary có 2 nút (thanh toán + tiếp tục) thì xếp dọc cho gọn */
+  .cart-summary-card .account-btn-save,
+  .cart-summary-card .account-btn-secondary {
+    width: 100%;
+    display: block;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .cart-summary-card .account-btn-secondary {
+    margin-top: 10px;
+  }
+
+  /* hàng cập nhật / xoá hết đừng bị lệch */
+  .cart-actions-row {
+    gap: 10px;
+  }
+}
+
+/* =========================
+   CART - TABLET NHỎ (<= 900px) nếu còn bị chật chữ
+   ========================= */
+@media (min-width: 769px) and (max-width: 900px) {
+  .cart-table-header,
+  .cart-item {
+    grid-template-columns: 2fr 0.85fr 0.85fr 0.85fr 0.55fr;
+  }
+
+  .cart-item-price,
+  .cart-item-total {
+    font-size: 13px;
+  }
+}
+
+/* =========================
+   FIX TRÀN CART TRÊN TABLET
+   (ép 1 cột từ <=1024px + chống overflow grid)
+========================= */
+
+/* 1) CHỐNG TRÀN: grid columns phải dùng minmax(0, ...) */
+.cart-table-header,
+.cart-item {
+  grid-template-columns:
+    minmax(0, 2.5fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 1fr)
+    minmax(0, 0.7fr);
+}
+
+/* 2) Grid item con phải cho phép co lại */
+.cart-item-info,
+.cart-item-price,
+.cart-item-qty,
+.cart-item-total,
+.cart-item-remove {
+  min-width: 0;
+}
+
+/* 3) Tên sản phẩm dài thì cắt dòng, không “đẩy” layout */
+.cart-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 4) Input số lượng không được có min-width gây lòi */
+.cart-item-qty { max-width: 140px; }
+.cart-qty-input { width: 100%; }
+
+/* 5) TABLET: ép layout 2 cột -> 1 cột để khỏi chật */
+@media (max-width: 1024px) {
+  .cart-layout {
+    flex-direction: column;
+  }
+
+  .cart-items,
+  .cart-summary {
+    width: 100%;
+  }
+
+  /* 2 nút trong summary full width */
+  .cart-checkout-btn,
+  .cart-summary-card .account-btn-save,
+  .cart-summary-card .account-btn-secondary {
+    width: 100%;
+    display: block;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .cart-summary-card .account-btn-secondary {
+    margin-top: 10px;
+  }
+}
